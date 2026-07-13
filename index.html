@@ -180,6 +180,15 @@ function record(key, extra, tsIso) {
   d[key].sort((a, b) => a.ts.localeCompare(b.ts));
   save(d); render(); scheduleSync();
 }
+// トイレ記録。大は便座で必ず小も出るため、大の記録時に小（量2・質2）を副次的に自動追加する
+function recordToilet(key, amount, quality, small, large, tsIso) {
+  if (large) {
+    record(key, { amount, quality, small: false, large: true }, tsIso);       // 大（入力値）
+    record(key, { amount: 2, quality: 2, small: true, large: false }, tsIso);  // 大に伴う小（副次・固定値）
+  } else {
+    record(key, { amount, quality, small: true, large: false }, tsIso);        // 小のみ
+  }
+}
 function undo(key) {
   const d = all();
   if (d[key] && d[key].length) {
@@ -453,7 +462,9 @@ box.addEventListener("click", e => {
       const whoEl = p.querySelector("[data-retro-who]");
       if (whoEl && whoEl.value.trim()) extra.who = whoEl.value.trim();
     }
-    if (editing && editing.key === key) { updateEvent(key, editing.id, extra, ts); editing = null; }
+    const hasChecks = !!p.querySelector("[data-retro-check]");
+    if (editing && editing.key === key) { updateEvent(key, editing.id, extra, ts); editing = null; } // 編集は単一レコードを更新
+    else if (hasChecks) { recordToilet(key, extra.amount, extra.quality, !!extra.small, !!extra.large, ts); } // 新規は大→小を副次追加
     else record(key, extra, ts);
     return;
   }
@@ -473,12 +484,16 @@ box.addEventListener("click", e => {
     const card = btn.closest(".counter");
     const a = card.querySelector('.sel[data-dim="amount"]'), q = card.querySelector('.sel[data-dim="quality"]');
     if (!a || !q) { alert("量と質を選んでください。"); return; }
-    const extra = { amount: Number(a.dataset.v), quality: Number(q.dataset.v) };
+    const amount = Number(a.dataset.v), quality = Number(q.dataset.v);
     const checkBtns = card.querySelectorAll("[data-check]");
-    if (checkBtns.length) { // 区分（小・大）はいずれか必須
-      if (![...checkBtns].some(b => b.classList.contains("sel"))) { alert("小・大のいずれかを選んでください。"); return; }
-      checkBtns.forEach(b => extra[b.dataset.check] = b.classList.contains("sel"));
+    if (checkBtns.length) { // 区分（小・大）はいずれか必須。大なら小を副次追加
+      const small = !!card.querySelector('.sel[data-check="small"]');
+      const large = !!card.querySelector('.sel[data-check="large"]');
+      if (!small && !large) { alert("小・大のいずれかを選んでください。"); return; }
+      recordToilet(key, amount, quality, small, large);
+      return;
     }
+    const extra = { amount, quality };
     const sx = card.querySelector(".sel[data-sex]"); // 接触は既定「なし」が選択済み
     if (sx) extra.sex = sx.dataset.sex === "1";
     const memoEl = card.querySelector("[data-memo]");
