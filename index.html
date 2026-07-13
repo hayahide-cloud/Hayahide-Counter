@@ -257,7 +257,12 @@ function dayGraphSvg(evs, type) {
   const xOf = ts => { const d = new Date(ts); return padL + (d.getHours() + d.getMinutes() / 60) / 24 * plotW; };
   const yOf = v => padT + (1 - (v - 1) / 4) * plotH; // 1..5 を 下..上 に
   let grid = "";
-  [0, 6, 12, 18, 24].forEach(h => { const x = padL + h / 24 * plotW; grid += `<line x1="${x.toFixed(1)}" y1="${padT}" x2="${x.toFixed(1)}" y2="${(padT + plotH).toFixed(1)}" stroke="var(--grid)" stroke-width="1"/><text x="${x.toFixed(1)}" y="${H - 3}" fill="var(--muted)" font-size="8" text-anchor="middle">${h}</text>`; });
+  // 1時間おきにグリッド線。6時間ごと（0/6/12/18/24）は濃く＋数字ラベルを表示
+  for (let h = 0; h <= 24; h++) {
+    const x = padL + h / 24 * plotW, major = h % 6 === 0;
+    grid += `<line x1="${x.toFixed(1)}" y1="${padT}" x2="${x.toFixed(1)}" y2="${(padT + plotH).toFixed(1)}" stroke="var(--grid)" stroke-width="1" opacity="${major ? 1 : 0.4}"/>`;
+    if (major) grid += `<text x="${x.toFixed(1)}" y="${H - 3}" fill="var(--muted)" font-size="8" text-anchor="middle">${h}</text>`;
+  }
   const isValue = (type === "mood" || type === "rated2" || type === "rated");
   const neutral = isValue ? `<line x1="${padL}" y1="${yOf(3).toFixed(1)}" x2="${padL + plotW}" y2="${yOf(3).toFixed(1)}" stroke="var(--grid)" stroke-width="1" stroke-dasharray="3 3"/>` : "";
   let series = "";
@@ -512,7 +517,7 @@ box.addEventListener("click", e => {
     if (btn.dataset.armed === "1") return record(key); // 2回目で記録（render()でボタンは元に戻る）
     // 1回目: 確認状態にする（3秒以内に再タップ／それ以外は自動で戻る）。誤タップ防止
     btn.dataset.armed = "1";
-    btn.textContent = "もう一度で記録";
+    btn.textContent = "もう1回タップで記録";
     btn.classList.add("arming");
     clearTimeout(btn._armTimer);
     btn._armTimer = setTimeout(() => { btn.dataset.armed = ""; btn.textContent = "＋ 記録"; btn.classList.remove("arming"); }, 3000);
