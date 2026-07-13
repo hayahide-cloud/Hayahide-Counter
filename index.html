@@ -69,6 +69,8 @@
   .memo { flex: 1; min-width: 0; font-family: inherit; font-size: 15px; background: var(--surface-2); color: var(--ink); border: 1px solid var(--border); border-radius: 11px; padding: 11px 13px; }
   .memo:focus { outline: 2px solid var(--accent); border-color: transparent; }
   .rsuffix { font-size: 13px; color: var(--muted); flex: none; }
+  .rcheck { display: inline-flex; align-items: center; gap: 6px; font-size: 15px; color: var(--ink); background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; padding: 8px 11px; }
+  .rcheck input { width: 18px; height: 18px; accent-color: var(--accent); }
   .cbtn:active { transform: scale(0.95); }
   .cstats { font-size: 12.5px; color: var(--ink-2); margin-top: 12px; }
   .cstats b { color: var(--ink); font-weight: 700; }
@@ -122,11 +124,8 @@
 /* カウンター定義。type: count=回数のみ / rated=★5評価 / rated2=量★5+質★5評価 / mood=感情値(遡及なし) */
 const COUNTERS = [
   { key: "mood",  name: "Mood", emoji: "🙂", type: "mood",  unit: "" },
-  { key: "breakfast", name: "Breakfast", emoji: "🍳", type: "rated2", unit: "回", price: true, place: true, who: true },
-  { key: "lunch",     name: "Lunch",     emoji: "🍱", type: "rated2", unit: "回", price: true, place: true, who: true },
-  { key: "dinner",    name: "Dinner",    emoji: "🍽️", type: "rated2", unit: "回", price: true, place: true, who: true },
-  { key: "pee",   name: "Restroom (S)", emoji: "🚽", type: "rated2", unit: "回" },
-  { key: "poop",  name: "Restroom (L)", emoji: "🧻", type: "rated2", unit: "回" },
+  { key: "meal",  name: "Meal", emoji: "🍽️", type: "rated2", unit: "回", price: true, place: true, who: true },
+  { key: "toilet", name: "Restroom", emoji: "🚽", type: "rated2", unit: "回", checks: [{ k: "small", label: "小" }, { k: "large", label: "大" }] },
   { key: "ejac",  name: "Release",  emoji: "💧", type: "rated2", unit: "回", sex: true, memo: true },
   { key: "smoke", name: "Smoke",  emoji: "🚬", type: "count", unit: "本", goal: "Reduce" },
 ];
@@ -212,13 +211,17 @@ function cardHtml(c) {
       + `<input class="memo" data-place="${c.key}" type="text" placeholder="外食先など（任意）" autocapitalize="off" autocorrect="off"></div>`;
     const whoRow = `<div class="crow"><span class="rlabel">誰と</span>`
       + `<input class="memo" data-who="${c.key}" type="text" placeholder="同席者（任意）" autocapitalize="off" autocorrect="off"></div>`;
-    btns = starRow("amount", "量") + starRow("quality", "質")
+    // トイレなど checks:true のカードは小・大などの区分を複数選択できる（いずれか必須）
+    const checkRow = c.checks ? `<div class="crow"><span class="rlabel">区分</span>`
+      + c.checks.map(ch => `<button class="cbtn" data-k="${c.key}" data-check="${ch.k}">${ch.label}</button>`).join("") + `</div>` : "";
+    btns = checkRow + starRow("amount", "量") + starRow("quality", "質")
       + (c.sex ? sexRow : "") + (c.memo ? memoRow : "")
       + (c.price ? priceRow : "") + (c.place ? placeRow : "") + (c.who ? whoRow : "")
       + `<button class="cbtn rec" data-k="${c.key}" data-rec2="1">＋ 記録</button><button class="cbtn undo" data-k="${c.key}" data-undo="1">取消</button>`;
     const aAvg = avgRating(c.key, 30, "amount"), qAvg = avgRating(c.key, 30, "quality");
     stats = `直近7日 <b>${w}</b>${unit} ／ 30日 <b>${m}</b>${unit}${aAvg ? ` ／ 量平均 <b>★${aAvg.toFixed(1)}</b>` : ""}${qAvg ? ` ／ 質平均 <b>★${qAvg.toFixed(1)}</b>` : ""}`;
-    retroExtra = `<select data-retro-amount><option value="" selected>量 未選択</option>${[5, 4, 3, 2, 1].map(v => `<option value="${v}">量★${v}</option>`).join("")}</select>`
+    retroExtra = (c.checks ? c.checks.map(ch => `<label class="rcheck"><input type="checkbox" data-retro-check="${ch.k}">${ch.label}</label>`).join("") : "")
+      + `<select data-retro-amount><option value="" selected>量 未選択</option>${[5, 4, 3, 2, 1].map(v => `<option value="${v}">量★${v}</option>`).join("")}</select>`
       + `<select data-retro-quality><option value="" selected>質 未選択</option>${[5, 4, 3, 2, 1].map(v => `<option value="${v}">質★${v}</option>`).join("")}</select>`
       + (c.sex ? `<select data-retro-sex><option value="0" selected>接触なし</option><option value="1">接触あり</option></select>` : "")
       + (c.memo ? `<input class="memo" data-retro-memo type="text" placeholder="任意" autocapitalize="off" autocorrect="off">` : "")
@@ -236,7 +239,7 @@ function cardHtml(c) {
       <div class="cbig"><span class="cval">${bigval}</span><span class="cunit">${biglabel}</span></div>
       <div class="cbtns">${btns}${retro ? `<button class="cbtn undo" data-retro-open="${c.key}">遡って記録</button>` : ""}</div>
       <div class="cstats">${stats}</div>
-      <div class="clast">${last ? "最終記録 " + fmtTime(last.ts) + (last.rating ? `（★${last.rating}）` : "") + (last.amount ? `（量★${last.amount}・質★${last.quality || "-"}${last.sex != null ? (last.sex ? "・接触あり" : "・接触なし") : ""}）` : "") + (last.mood ? `（${last.mood}/5）` : "") + (last.price != null ? ` ${last.price}円` : "") + (last.place ? ` 場所: ${esc(last.place)}` : "") + (last.who ? ` 誰と: ${esc(last.who)}` : "") + (last.memo ? ` 視覚資料: ${esc(last.memo)}` : "") : "本日の記録なし"}</div>
+      <div class="clast">${last ? "最終記録 " + fmtTime(last.ts) + (last.rating ? `（★${last.rating}）` : "") + (last.amount ? `（量★${last.amount}・質★${last.quality || "-"}${last.sex != null ? (last.sex ? "・接触あり" : "・接触なし") : ""}）${(last.small || last.large) ? " " + [last.small ? "小" : "", last.large ? "大" : ""].filter(Boolean).join("・") : ""}` : "") + (last.mood ? `（${last.mood}/5）` : "") + (last.price != null ? ` ${last.price}円` : "") + (last.place ? ` 場所: ${esc(last.place)}` : "") + (last.who ? ` 誰と: ${esc(last.who)}` : "") + (last.memo ? ` 視覚資料: ${esc(last.memo)}` : "") : "本日の記録なし"}</div>
       ${retro ? `<div class="retro" data-retro="${c.key}"><label>過去の日時を指定して記録</label><div class="rrow"><input type="datetime-local" data-retro-dt>${retroExtra}<button class="cbtn rec" data-retro-submit="${c.key}">記録</button></div></div>` : ""}
     </div>`;
 }
@@ -262,6 +265,11 @@ box.addEventListener("click", e => {
     if (aSel && qSel) {
       if (!aSel.value || !qSel.value) { alert("量と質を選んでください。"); return; }
       extra = { amount: Number(aSel.value), quality: Number(qSel.value) };
+      const retroChecks = p.querySelectorAll("[data-retro-check]");
+      if (retroChecks.length) { // 区分（小・大）はいずれか必須
+        if (![...retroChecks].some(ch => ch.checked)) { alert("小・大のいずれかを選んでください。"); return; }
+        retroChecks.forEach(ch => extra[ch.dataset.retroCheck] = ch.checked);
+      }
       const sexSel = p.querySelector("[data-retro-sex]");
       if (sexSel) extra.sex = sexSel.value === "1"; // 既定「なし」
       const memoEl = p.querySelector("[data-retro-memo]");
@@ -279,9 +287,13 @@ box.addEventListener("click", e => {
   const key = btn.dataset.k;
   if (btn.dataset.undo) return undo(key);
   if (btn.dataset.rec) return record(key);
-  if (btn.dataset.dim || "sex" in btn.dataset) { // 量・質の★／性行為あり・なしの選択トグル（この時点では記録しない）
+  if (btn.dataset.dim || "sex" in btn.dataset) { // 量・質の★／接触なし・あり の選択トグル（この時点では記録しない）
     btn.parentElement.querySelectorAll(".cbtn").forEach(b => b.classList.remove("sel"));
     btn.classList.add("sel");
+    return;
+  }
+  if ("check" in btn.dataset) { // 小・大などの区分は独立トグル（複数選択可）
+    btn.classList.toggle("sel");
     return;
   }
   if (btn.dataset.rec2) {
@@ -289,6 +301,11 @@ box.addEventListener("click", e => {
     const a = card.querySelector('.sel[data-dim="amount"]'), q = card.querySelector('.sel[data-dim="quality"]');
     if (!a || !q) { alert("量と質を選んでください。"); return; }
     const extra = { amount: Number(a.dataset.v), quality: Number(q.dataset.v) };
+    const checkBtns = card.querySelectorAll("[data-check]");
+    if (checkBtns.length) { // 区分（小・大）はいずれか必須
+      if (![...checkBtns].some(b => b.classList.contains("sel"))) { alert("小・大のいずれかを選んでください。"); return; }
+      checkBtns.forEach(b => extra[b.dataset.check] = b.classList.contains("sel"));
+    }
     const sx = card.querySelector(".sel[data-sex]"); // 接触は既定「なし」が選択済み
     if (sx) extra.sex = sx.dataset.sex === "1";
     const memoEl = card.querySelector("[data-memo]");
