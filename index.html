@@ -88,7 +88,10 @@
   .retro.open { display: block; }
   .retro label { font-size: 11px; color: var(--muted); display: block; margin-bottom: 8px; }
   .rrow { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-  .retro input, .retro select { font-family: inherit; font-size: 16px; background: var(--surface-2); color: var(--ink); border: 1px solid var(--border); border-radius: 10px; padding: 10px 11px; color-scheme: dark; }
+  .retro input, .retro select { font-family: inherit; font-size: 16px; background: var(--surface-2); color: var(--ink); border: 1px solid var(--border); border-radius: 10px; padding: 12px 12px; color-scheme: dark; }
+  /* 入力欄が潰れて1文字幅にならないよう最小幅を確保し、狭い画面では折り返して大きく表示する */
+  .rrow input, .rrow select { flex: 1 1 8.5em; min-width: 8em; }
+  .rrow input[type="datetime-local"] { flex: 1 1 11em; min-width: 10.5em; }
 
   footer { color: var(--muted); font-size: 11px; text-align: center; margin-top: 8px; }
 </style>
