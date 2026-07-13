@@ -188,15 +188,15 @@ function cardHtml(c) {
     stats = `直近7日 <b>${w}</b>${unit} ／ 30日 <b>${m}</b>${unit}${avg ? ` ／ 平均 <b>★${avg.toFixed(1)}</b>` : ""}`;
     retroExtra = `<select data-retro-rating>${[5, 4, 3, 2, 1].map(v => `<option value="${v}">★${v}</option>`).join("")}</select>`;
   } else if (c.type === "rated2") {
-    // 量・質を★で選んでから「＋記録」で1件記録する（初期選択は★3）
+    // 量・質を★で選んでから「＋記録」で1件記録する。初期選択なし＝両方を選ばないと記録できない
     const starRow = (dim, label) => `<div class="crow"><span class="rlabel">${label}</span>`
-      + [1, 2, 3, 4, 5].map(v => `<button class="cbtn${v === 3 ? " sel" : ""}" data-k="${c.key}" data-dim="${dim}" data-v="${v}">★${v}</button>`).join("") + `</div>`;
+      + [1, 2, 3, 4, 5].map(v => `<button class="cbtn" data-k="${c.key}" data-dim="${dim}" data-v="${v}">★${v}</button>`).join("") + `</div>`;
     btns = starRow("amount", "量") + starRow("quality", "質")
       + `<button class="cbtn rec" data-k="${c.key}" data-rec2="1">＋ 記録</button><button class="cbtn undo" data-k="${c.key}" data-undo="1">取消</button>`;
     const aAvg = avgRating(c.key, 30, "amount"), qAvg = avgRating(c.key, 30, "quality");
     stats = `直近7日 <b>${w}</b>${unit} ／ 30日 <b>${m}</b>${unit}${aAvg ? ` ／ 量平均 <b>★${aAvg.toFixed(1)}</b>` : ""}${qAvg ? ` ／ 質平均 <b>★${qAvg.toFixed(1)}</b>` : ""}`;
-    retroExtra = `<select data-retro-amount>${[5, 4, 3, 2, 1].map(v => `<option value="${v}"${v === 3 ? " selected" : ""}>量★${v}</option>`).join("")}</select>`
-      + `<select data-retro-quality>${[5, 4, 3, 2, 1].map(v => `<option value="${v}"${v === 3 ? " selected" : ""}>質★${v}</option>`).join("")}</select>`;
+    retroExtra = `<select data-retro-amount><option value="" selected>量 未選択</option>${[5, 4, 3, 2, 1].map(v => `<option value="${v}">量★${v}</option>`).join("")}</select>`
+      + `<select data-retro-quality><option value="" selected>質 未選択</option>${[5, 4, 3, 2, 1].map(v => `<option value="${v}">質★${v}</option>`).join("")}</select>`;
   } else {
     btns = `<button class="cbtn rec" data-k="${c.key}" data-rec="1">＋ 記録</button><button class="cbtn undo" data-k="${c.key}" data-undo="1">取消</button>`;
     stats = `直近7日 <b>${w}</b>${unit} ／ 30日 <b>${m}</b>${unit}`;
@@ -231,7 +231,10 @@ box.addEventListener("click", e => {
     const aSel = p.querySelector("[data-retro-amount]"), qSel = p.querySelector("[data-retro-quality]");
     let extra = {};
     if (rSel) extra = { rating: Number(rSel.value) };
-    if (aSel && qSel) extra = { amount: Number(aSel.value), quality: Number(qSel.value) };
+    if (aSel && qSel) {
+      if (!aSel.value || !qSel.value) { alert("量と質を選んでください。"); return; }
+      extra = { amount: Number(aSel.value), quality: Number(qSel.value) };
+    }
     record(key, extra, ts);
     return;
   }
@@ -246,7 +249,8 @@ box.addEventListener("click", e => {
   if (btn.dataset.rec2) {
     const card = btn.closest(".counter");
     const a = card.querySelector('.sel[data-dim="amount"]'), q = card.querySelector('.sel[data-dim="quality"]');
-    return record(key, { amount: a ? Number(a.dataset.v) : 3, quality: q ? Number(q.dataset.v) : 3 });
+    if (!a || !q) { alert("量と質を選んでください。"); return; }
+    return record(key, { amount: Number(a.dataset.v), quality: Number(q.dataset.v) });
   }
   if (btn.dataset.rating) return record(key, { rating: Number(btn.dataset.rating) });
   if (btn.dataset.mood) return record(key, { mood: Number(btn.dataset.mood) });
