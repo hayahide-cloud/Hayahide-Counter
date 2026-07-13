@@ -63,6 +63,7 @@
   .brk { flex-basis: 100%; height: 0; margin: 0; } /* flex-wrap内で強制改行するスペーサー */
   .cbtn { cursor: pointer; font-family: inherit; font-size: 15px; font-weight: 700; line-height: 1; border: 1px solid var(--border); border-radius: 11px; background: var(--surface-2); color: var(--ink); padding: 12px 14px; }
   .cbtn.rec { background: linear-gradient(135deg, var(--accent-deep), var(--accent)); color: #fff; border: none; }
+  .cbtn.rec.arming { background: linear-gradient(135deg, #b06a12, #e0902a); } /* 誤タップ防止の確認状態 */
   .cbtn.undo { color: var(--muted); font-size: 13px; font-weight: 600; }
   .cbtn.sel { background: linear-gradient(135deg, var(--accent-deep), var(--accent)); color: #fff; border-color: transparent; }
   .crow { flex: 1 0 100%; display: flex; gap: 8px; align-items: center; }
@@ -147,7 +148,7 @@ const COUNTERS = [
   { key: "toilet", name: "Restroom", emoji: "🚽", type: "rated2", unit: "回", checks: [{ k: "small", label: "小" }, { k: "large", label: "大" }] },
   { key: "ejac",  name: "Release",  emoji: "💧", type: "rated2", unit: "回", sex: true, memo: true },
   { key: "ibuprofen", name: "Ibuprofen", emoji: "💊", type: "dose", unit: "回", dose: 150, doseUnit: "mg", reasonDefault: "頭痛" },
-  { key: "smoke", name: "Smoke",  emoji: "🚬", type: "count", unit: "本", goal: "Reduce" },
+  { key: "smoke", name: "Smoke",  emoji: "🚬", type: "count", unit: "本", goal: "Reduce", confirm: true },
 ];
 const MOODS = [{ v: 1, e: "😣" }, { v: 2, e: "😕" }, { v: 3, e: "😐" }, { v: 4, e: "🙂" }, { v: 5, e: "😄" }];
 
@@ -384,7 +385,7 @@ function cardHtml(c) {
     stats = `今日 <b>${todayEvents(c.key).length}</b>回 ／ 直近7日 <b>${w}</b>回 ／ 30日 <b>${m}</b>回`;
     retroExtra = `<input class="memo" data-retro-dose type="number" inputmode="numeric" placeholder="用量(${du})"><input class="memo" data-retro-reason type="text" placeholder="理由（任意）" autocapitalize="off" autocorrect="off">`;
   } else {
-    btns = `<button class="cbtn rec" data-k="${c.key}" data-rec="1">＋ 記録</button><button class="cbtn undo" data-k="${c.key}" data-undo="1">取消</button>`;
+    btns = `<button class="cbtn rec" data-k="${c.key}" data-rec="1"${c.confirm ? ' data-confirm="1"' : ''}>＋ 記録</button><button class="cbtn undo" data-k="${c.key}" data-undo="1">取消</button>`;
     stats = `直近7日 <b>${w}</b>${unit} ／ 30日 <b>${m}</b>${unit}`;
   }
 
@@ -517,7 +518,17 @@ box.addEventListener("click", e => {
   }
   const key = btn.dataset.k;
   if (btn.dataset.undo) return undo(key);
-  if (btn.dataset.rec) return record(key);
+  if (btn.dataset.rec) {
+    if (!btn.dataset.confirm) return record(key); // 確認不要
+    if (btn.dataset.armed === "1") return record(key); // 2回目で記録（render()でボタンは元に戻る）
+    // 1回目: 確認状態にする（3秒以内に再タップ／それ以外は自動で戻る）。誤タップ防止
+    btn.dataset.armed = "1";
+    btn.textContent = "もう一度で記録";
+    btn.classList.add("arming");
+    clearTimeout(btn._armTimer);
+    btn._armTimer = setTimeout(() => { btn.dataset.armed = ""; btn.textContent = "＋ 記録"; btn.classList.remove("arming"); }, 3000);
+    return;
+  }
   if (btn.dataset.dim || "sex" in btn.dataset) { // 量・質の★／接触なし・あり の選択トグル（この時点では記録しない）
     btn.parentElement.querySelectorAll(".cbtn").forEach(b => b.classList.remove("sel"));
     btn.classList.add("sel");
