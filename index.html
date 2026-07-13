@@ -856,7 +856,8 @@ async function fetchHealth(c) {
 // ヘルスケアカードの描画（データが無ければ非表示）
 function renderHealth() {
   const el = document.getElementById("health-card"), h = getHealth();
-  if (!h) { el.hidden = true; return; }
+  // データ無し、または全項目が空（初期ファイル）の場合は非表示
+  if (!h || (h.steps == null && h.weight == null && h.heartRate == null)) { el.hidden = true; return; }
   el.hidden = false;
   const put = (sel, v, unit) => { el.querySelector(sel).textContent = (v != null && v !== "") ? (v + (unit || "")) : "—"; };
   put("[data-h-steps]", h.steps, "");
