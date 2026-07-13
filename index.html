@@ -70,6 +70,13 @@
   .rlabel { font-size: 12px; color: var(--muted); min-width: 3.4em; flex: none; }
   .memo { flex: 1; min-width: 0; font-family: inherit; font-size: 15px; background: var(--surface-2); color: var(--ink); border: 1px solid var(--border); border-radius: 11px; padding: 11px 13px; }
   .memo:focus { outline: 2px solid var(--accent); border-color: transparent; }
+  /* 数値欄の増減スピナー（1ずつ動く矢印）を非表示にする */
+  .memo::-webkit-outer-spin-button, .memo::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  .memo[type="number"] { -moz-appearance: textfield; appearance: textfield; }
+  /* 服薬・サプリの個別カード折りたたみ */
+  .medtoggle { width: 100%; justify-content: flex-start; font-size: 14px; font-weight: 700; margin-bottom: 16px; padding: 13px 16px; background: var(--surface); }
+  .medgroup { display: none; }
+  .medgroup.open { display: block; }
   .rsuffix { font-size: 13px; color: var(--muted); flex: none; }
   .rnote { font-size: 11.5px; color: var(--muted); flex: 1; min-width: 0; }
   .rcheck { display: inline-flex; align-items: center; gap: 6px; font-size: 15px; color: var(--ink); background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; padding: 8px 11px; }
@@ -156,12 +163,12 @@ const COUNTERS = [
     { label: "昼", keys: ["cepharanthin"], note: "セファ" },
     { label: "夜", keys: ["cepharanthin", "betamethasone", "epinastine", "dha"], note: "セファ・ベタ・エピナ・DHA" },
   ] },
-  { key: "ibuprofen", name: "Ibuprofen", emoji: "💊", type: "dose", unit: "回", dose: 150, doseUnit: "mg", reasonDefault: "頭痛", confirm: true },
-  { key: "cepharanthin", name: "セファランチン", emoji: "💊", type: "count", unit: "錠", perDay: 3, sched: "朝・昼・晩", confirm: true },
-  { key: "epinastine", name: "エピナスチン", emoji: "💊", type: "count", unit: "錠", perDay: 1, sched: "晩のみ", confirm: true },
-  { key: "betamethasone", name: "ベタメタゾンローション", emoji: "🧴", type: "count", unit: "回", perDay: 2, sched: "朝・晩", confirm: true },
-  { key: "zinc", name: "亜鉛", emoji: "💊", type: "count", unit: "回", perDay: 1, sched: "1日1回", confirm: true },
-  { key: "dha",  name: "DHA", emoji: "🐟", type: "count", unit: "回", perDay: 2, sched: "1日2回", confirm: true },
+  { key: "ibuprofen", name: "Ibuprofen", emoji: "💊", type: "dose", unit: "回", dose: 150, doseUnit: "mg", reasonDefault: "頭痛", confirm: true, group: "meds" },
+  { key: "cepharanthin", name: "セファランチン", emoji: "💊", type: "count", unit: "錠", perDay: 3, sched: "朝・昼・晩", confirm: true, group: "meds" },
+  { key: "epinastine", name: "エピナスチン", emoji: "💊", type: "count", unit: "錠", perDay: 1, sched: "晩のみ", confirm: true, group: "meds" },
+  { key: "betamethasone", name: "ベタメタゾンローション", emoji: "🧴", type: "count", unit: "回", perDay: 2, sched: "朝・晩", confirm: true, group: "meds" },
+  { key: "zinc", name: "亜鉛", emoji: "💊", type: "count", unit: "回", perDay: 1, sched: "1日1回", confirm: true, group: "meds" },
+  { key: "dha",  name: "DHA", emoji: "🐟", type: "count", unit: "回", perDay: 2, sched: "1日2回", confirm: true, group: "meds" },
   { key: "smoke", name: "Smoke",  emoji: "🚬", type: "count", unit: "本", goal: "Reduce", confirm: true },
 ];
 const MOODS = [{ v: 1, e: "😣" }, { v: 2, e: "😕" }, { v: 3, e: "😐" }, { v: 4, e: "🙂" }, { v: 5, e: "😄" }];
@@ -486,8 +493,25 @@ function fillEditForm(card, e) {
   const lbl = p.querySelector(".retro-label"); if (lbl) lbl.textContent = "この記録を修正（日時も変更可）";
   const cancel = p.querySelector("[data-canceledit]"); if (cancel) cancel.style.display = "";
 }
+const MEDS_OPEN_KEY = "hayahide_meds_open";
 function render() {
-  box.innerHTML = COUNTERS.map(cardHtml).join("");
+  const medsOpen = localStorage.getItem(MEDS_OPEN_KEY) === "1";
+  let html = "", inGroup = false;
+  COUNTERS.forEach(c => {
+    if (c.group === "meds") {
+      if (!inGroup) { // 服薬個別カードの先頭に開閉トグル＋折りたたみ枠を差し込む
+        html += `<button class="cbtn medtoggle" data-medtoggle="1">${medsOpen ? "▼ 服薬・サプリの個別カードを隠す" : "▶ 服薬・サプリの個別カード（Ibuprofen・セファ 他）を表示"}</button>`;
+        html += `<div class="medgroup${medsOpen ? " open" : ""}">`;
+        inGroup = true;
+      }
+      html += cardHtml(c);
+    } else {
+      if (inGroup) { html += `</div>`; inGroup = false; }
+      html += cardHtml(c);
+    }
+  });
+  if (inGroup) html += `</div>`;
+  box.innerHTML = html;
   if (editing) { // 再描画後に編集モードを復元
     const e = events(editing.key).find(ev => ev.id === editing.id);
     const card = box.querySelector(`.counter[data-key="${editing.key}"]`);
@@ -591,6 +615,10 @@ box.addEventListener("click", e => {
     else if (hasChecks) { recordToilet(key, extra.amount, extra.quality, !!extra.small, !!extra.large, ts); } // 新規は大→小を副次追加
     else record(key, extra, ts);
     return;
+  }
+  if (btn.dataset.medtoggle) { // 服薬個別カードの表示/非表示を切り替え（端末に記憶）
+    localStorage.setItem(MEDS_OPEN_KEY, localStorage.getItem(MEDS_OPEN_KEY) === "1" ? "0" : "1");
+    return render();
   }
   // 服薬まとめ: 時間帯の全薬をまとめて記録（2タップ確認）
   if (btn.dataset.routineKeys) {
