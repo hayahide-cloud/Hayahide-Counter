@@ -196,14 +196,6 @@ function recordToilet(key, amount, quality, small, large, tsIso) {
     record(key, { amount, quality, small: true, large: false }, tsIso);        // 小のみ
   }
 }
-function undo(key) {
-  const d = all();
-  if (d[key] && d[key].length) {
-    const removed = d[key].pop();
-    if (removed && removed.id) { const del = deleted(); del.push(removed.id); saveDeleted(del); }
-    save(d); render(); scheduleSync();
-  }
-}
 // 記録1件の値を上書き更新（idは保持、mtを更新）。tsIso 未指定なら元のtsを維持
 function updateEvent(key, id, extra, tsIso) {
   const d = all(); const arr = d[key] || [];
@@ -313,14 +305,12 @@ function cardHtml(c) {
     // 絵文字の選択列と操作ボタン列を .brk（全幅スペーサー）で改行して分ける
     btns = MOODS.map(x => `<button class="cbtn" data-k="${c.key}" data-moodsel="${x.v}">${x.e}</button>`).join("")
       + `<div class="brk"></div>`
-      + `<button class="cbtn rec" data-k="${c.key}" data-recmood="1">＋ 記録</button>`
-      + `<button class="cbtn undo" data-k="${c.key}" data-undo="1">取消</button>`;
+      + `<button class="cbtn rec" data-k="${c.key}" data-recmood="1">＋ 記録</button>`;
     stats = `今日 <b>${today.length}</b>回記録 ／ 直近7日 <b>${w}</b>回`;
     // 遡って記録・編集用の気分セレクタ
     retroExtra = `<select data-retro-moodsel><option value="" selected>気分 未選択</option>${MOODS.map(x => `<option value="${x.v}">${x.e} ${x.v}/5</option>`).join("")}</select>`;
   } else if (c.type === "rated") {
-    btns = [1, 2, 3, 4, 5].map(v => `<button class="cbtn" data-k="${c.key}" data-rating="${v}">★${v}</button>`).join("")
-      + `<button class="cbtn undo" data-k="${c.key}" data-undo="1">取消</button>`;
+    btns = [1, 2, 3, 4, 5].map(v => `<button class="cbtn" data-k="${c.key}" data-rating="${v}">★${v}</button>`).join("");
     const avg = avgRating(c.key, 30);
     stats = `直近7日 <b>${w}</b>${unit} ／ 30日 <b>${m}</b>${unit}${avg ? ` ／ 平均 <b>★${avg.toFixed(1)}</b>` : ""}`;
     retroExtra = `<select data-retro-rating>${[5, 4, 3, 2, 1].map(v => `<option value="${v}">★${v}</option>`).join("")}</select>`;
@@ -350,7 +340,7 @@ function cardHtml(c) {
     btns = checkRow + starRow("amount", "量") + starRow("quality", "質")
       + (c.sex ? sexRow : "") + (c.memo ? memoRow : "")
       + (c.content ? contentRow : "") + (c.price ? priceRow : "") + (c.place ? placeRow : "") + (c.who ? whoRow : "")
-      + `<button class="cbtn rec" data-k="${c.key}" data-rec2="1">＋ 記録</button><button class="cbtn undo" data-k="${c.key}" data-undo="1">取消</button>`;
+      + `<button class="cbtn rec" data-k="${c.key}" data-rec2="1">＋ 記録</button>`;
     const aAvg = avgRating(c.key, 30, "amount"), qAvg = avgRating(c.key, 30, "quality");
     stats = `直近7日 <b>${w}</b>${unit} ／ 30日 <b>${m}</b>${unit}${aAvg ? ` ／ 量平均 <b>★${aAvg.toFixed(1)}</b>` : ""}${qAvg ? ` ／ 質平均 <b>★${qAvg.toFixed(1)}</b>` : ""}`;
     retroExtra = (c.checks ? c.checks.map(ch => `<label class="rcheck"><input type="checkbox" data-retro-check="${ch.k}">${ch.label}</label>`).join("") : "")
@@ -381,11 +371,11 @@ function cardHtml(c) {
     const doseRow = `<div class="crow"><span class="rlabel">用量</span><input class="memo" data-dose="${c.key}" type="number" inputmode="numeric" value="${c.dose || ""}" placeholder="${c.dose || ""}"><span class="rsuffix">${du}</span></div>`;
     const reasonRow = `<div class="crow"><span class="rlabel">理由</span><input class="memo" data-reason="${c.key}" type="text" value="${esc(c.reasonDefault || "")}" placeholder="理由（任意）" autocapitalize="off" autocorrect="off"></div>`;
     btns = doseRow + reasonRow
-      + `<button class="cbtn rec" data-dose-rec="${c.key}">＋ 記録</button><button class="cbtn undo" data-k="${c.key}" data-undo="1">取消</button>`;
+      + `<button class="cbtn rec" data-dose-rec="${c.key}">＋ 記録</button>`;
     stats = `今日 <b>${todayEvents(c.key).length}</b>回 ／ 直近7日 <b>${w}</b>回 ／ 30日 <b>${m}</b>回`;
     retroExtra = `<input class="memo" data-retro-dose type="number" inputmode="numeric" placeholder="用量(${du})"><input class="memo" data-retro-reason type="text" placeholder="理由（任意）" autocapitalize="off" autocorrect="off">`;
   } else {
-    btns = `<button class="cbtn rec" data-k="${c.key}" data-rec="1"${c.confirm ? ' data-confirm="1"' : ''}>＋ 記録</button><button class="cbtn undo" data-k="${c.key}" data-undo="1">取消</button>`;
+    btns = `<button class="cbtn rec" data-k="${c.key}" data-rec="1"${c.confirm ? ' data-confirm="1"' : ''}>＋ 記録</button>`;
     stats = `直近7日 <b>${w}</b>${unit} ／ 30日 <b>${m}</b>${unit}`;
   }
 
@@ -517,7 +507,6 @@ box.addEventListener("click", e => {
     return;
   }
   const key = btn.dataset.k;
-  if (btn.dataset.undo) return undo(key);
   if (btn.dataset.rec) {
     if (!btn.dataset.confirm) return record(key); // 確認不要
     if (btn.dataset.armed === "1") return record(key); // 2回目で記録（render()でボタンは元に戻る）
