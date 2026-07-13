@@ -150,12 +150,12 @@ const COUNTERS = [
   { key: "meal",  name: "Meal", emoji: "🍽️", type: "rated2", unit: "回", content: true, price: true, place: true, who: true },
   { key: "toilet", name: "Restroom", emoji: "🚽", type: "rated2", unit: "回", checks: [{ k: "small", label: "小" }, { k: "large", label: "大" }] },
   { key: "ejac",  name: "Release",  emoji: "💧", type: "rated2", unit: "回", sex: true, memo: true },
-  { key: "ibuprofen", name: "Ibuprofen", emoji: "💊", type: "dose", unit: "回", dose: 150, doseUnit: "mg", reasonDefault: "頭痛" },
-  { key: "cepharanthin", name: "セファランチン", emoji: "💊", type: "count", unit: "錠", perDay: 3, sched: "朝・昼・晩" },
-  { key: "epinastine", name: "エピナスチン", emoji: "💊", type: "count", unit: "錠", perDay: 1, sched: "晩のみ" },
-  { key: "betamethasone", name: "ベタメタゾンローション", emoji: "🧴", type: "count", unit: "回", perDay: 2, sched: "朝・晩" },
-  { key: "zinc", name: "亜鉛", emoji: "💊", type: "count", unit: "回", perDay: 1, sched: "1日1回" },
-  { key: "dha",  name: "DHA", emoji: "🐟", type: "count", unit: "回", perDay: 2, sched: "1日2回" },
+  { key: "ibuprofen", name: "Ibuprofen", emoji: "💊", type: "dose", unit: "回", dose: 150, doseUnit: "mg", reasonDefault: "頭痛", confirm: true },
+  { key: "cepharanthin", name: "セファランチン", emoji: "💊", type: "count", unit: "錠", perDay: 3, sched: "朝・昼・晩", confirm: true },
+  { key: "epinastine", name: "エピナスチン", emoji: "💊", type: "count", unit: "錠", perDay: 1, sched: "晩のみ", confirm: true },
+  { key: "betamethasone", name: "ベタメタゾンローション", emoji: "🧴", type: "count", unit: "回", perDay: 2, sched: "朝・晩", confirm: true },
+  { key: "zinc", name: "亜鉛", emoji: "💊", type: "count", unit: "回", perDay: 1, sched: "1日1回", confirm: true },
+  { key: "dha",  name: "DHA", emoji: "🐟", type: "count", unit: "回", perDay: 2, sched: "1日2回", confirm: true },
   { key: "smoke", name: "Smoke",  emoji: "🚬", type: "count", unit: "本", goal: "Reduce", confirm: true },
 ];
 const MOODS = [{ v: 1, e: "😣" }, { v: 2, e: "😕" }, { v: 3, e: "😐" }, { v: 4, e: "🙂" }, { v: 5, e: "😄" }];
@@ -386,7 +386,7 @@ function cardHtml(c) {
     const doseRow = `<div class="crow"><span class="rlabel">用量</span><input class="memo" data-dose="${c.key}" type="number" inputmode="numeric" value="${c.dose || ""}" placeholder="${c.dose || ""}"><span class="rsuffix">${du}</span></div>`;
     const reasonRow = `<div class="crow"><span class="rlabel">理由</span><input class="memo" data-reason="${c.key}" type="text" value="${esc(c.reasonDefault || "")}" placeholder="理由（任意）" autocapitalize="off" autocorrect="off"></div>`;
     btns = doseRow + reasonRow
-      + `<button class="cbtn rec" data-dose-rec="${c.key}">＋ 記録</button>`;
+      + `<button class="cbtn rec" data-dose-rec="${c.key}"${c.confirm ? ' data-confirm="1"' : ''}>＋ 記録</button>`;
     stats = `今日 <b>${todayEvents(c.key).length}</b>回 ／ 直近7日 <b>${w}</b>回 ／ 30日 <b>${m}</b>回`;
     retroExtra = `<input class="memo" data-retro-dose type="number" inputmode="numeric" placeholder="用量(${du})"><input class="memo" data-retro-reason type="text" placeholder="理由（任意）" autocapitalize="off" autocorrect="off">`;
   } else { // count型（喫煙・定期薬など）
@@ -450,6 +450,18 @@ function render() {
     const card = box.querySelector(`.counter[data-key="${editing.key}"]`);
     if (e && card) fillEditForm(card, e); else editing = null;
   }
+}
+
+// 誤タップ防止の2タップ確認。confirm指定ボタンで、armされていなければ確認状態にして true を返す
+// （＝まだ記録しない）。3秒以内に再タップで記録、放置で自動リセット。喫煙・服薬などの基本の型
+function needConfirm(btn) {
+  if (!btn.dataset.confirm || btn.dataset.armed === "1") return false;
+  btn.dataset.armed = "1";
+  btn.textContent = "もう1回タップで記録";
+  btn.classList.add("arming");
+  clearTimeout(btn._armTimer);
+  btn._armTimer = setTimeout(() => { btn.dataset.armed = ""; btn.textContent = "＋ 記録"; btn.classList.remove("arming"); }, 3000);
+  return true;
 }
 
 box.addEventListener("click", e => {
@@ -538,15 +550,8 @@ box.addEventListener("click", e => {
   }
   const key = btn.dataset.k;
   if (btn.dataset.rec) {
-    if (!btn.dataset.confirm) return record(key); // 確認不要
-    if (btn.dataset.armed === "1") return record(key); // 2回目で記録（render()でボタンは元に戻る）
-    // 1回目: 確認状態にする（3秒以内に再タップ／それ以外は自動で戻る）。誤タップ防止
-    btn.dataset.armed = "1";
-    btn.textContent = "もう1回タップで記録";
-    btn.classList.add("arming");
-    clearTimeout(btn._armTimer);
-    btn._armTimer = setTimeout(() => { btn.dataset.armed = ""; btn.textContent = "＋ 記録"; btn.classList.remove("arming"); }, 3000);
-    return;
+    if (needConfirm(btn)) return; // 誤タップ防止の2タップ確認（confirm指定時）
+    return record(key);
   }
   if (btn.dataset.dim || "sex" in btn.dataset) { // 量・質の★／接触なし・あり の選択トグル（この時点では記録しない）
     btn.parentElement.querySelectorAll(".cbtn").forEach(b => b.classList.remove("sel"));
@@ -631,6 +636,7 @@ box.addEventListener("click", e => {
     const k = btn.dataset.doseRec, card = btn.closest(".counter");
     const doseEl = card.querySelector("[data-dose]"), reasonEl = card.querySelector("[data-reason]");
     if (!doseEl || doseEl.value.trim() === "" || isNaN(Number(doseEl.value))) { alert("用量を入力してください。"); return; }
+    if (needConfirm(btn)) return; // 2タップ確認
     const extra = { mg: Number(doseEl.value) };
     if (reasonEl && reasonEl.value.trim()) extra.reason = reasonEl.value.trim();
     return record(k, extra);
