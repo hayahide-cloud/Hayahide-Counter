@@ -63,6 +63,9 @@
   .cbtn { cursor: pointer; font-family: inherit; font-size: 15px; font-weight: 700; line-height: 1; border: 1px solid var(--border); border-radius: 11px; background: var(--surface-2); color: var(--ink); padding: 12px 14px; }
   .cbtn.rec { background: linear-gradient(135deg, var(--accent-deep), var(--accent)); color: #fff; border: none; }
   .cbtn.undo { color: var(--muted); font-size: 13px; font-weight: 600; }
+  .cbtn.sel { background: linear-gradient(135deg, var(--accent-deep), var(--accent)); color: #fff; border-color: transparent; }
+  .crow { flex: 1 0 100%; display: flex; gap: 8px; align-items: center; }
+  .rlabel { font-size: 12px; color: var(--muted); min-width: 1.5em; }
   .cbtn:active { transform: scale(0.95); }
   .cstats { font-size: 12.5px; color: var(--ink-2); margin-top: 12px; }
   .cstats b { color: var(--ink); font-weight: 700; }
@@ -113,13 +116,13 @@
 </div>
 
 <script>
-/* カウンター定義。type: count=回数のみ / rated=★5評価 / mood=感情値(遡及なし) */
+/* カウンター定義。type: count=回数のみ / rated=★5評価 / rated2=量★5+質★5評価 / mood=感情値(遡及なし) */
 const COUNTERS = [
   { key: "mood",  name: "感情値", emoji: "🙂", type: "mood",  unit: "" },
+  { key: "pee",   name: "トイレ（小）", emoji: "🚽", type: "rated2", unit: "回" },
+  { key: "poop",  name: "トイレ（大）", emoji: "💩", type: "rated2", unit: "回" },
+  { key: "ejac",  name: "射精",  emoji: "💧", type: "rated2", unit: "回" },
   { key: "smoke", name: "喫煙",  emoji: "🚬", type: "count", unit: "本", goal: "減らす" },
-  { key: "ejac",  name: "射精",  emoji: "💧", type: "rated", unit: "回" },
-  { key: "pee",   name: "トイレ（小）", emoji: "🚽", type: "count", unit: "回" },
-  { key: "poop",  name: "トイレ（大）", emoji: "💩", type: "count", unit: "回" },
 ];
 const MOODS = [{ v: 1, e: "😣" }, { v: 2, e: "😕" }, { v: 3, e: "😐" }, { v: 4, e: "🙂" }, { v: 5, e: "😄" }];
 
@@ -141,7 +144,7 @@ function sinceDays(n) { const d = new Date(); d.setDate(d.getDate() - n + 1); d.
 function countDays(k, n) { const f = sinceDays(n); return events(k).filter(e => new Date(e.ts).getTime() >= f).length; }
 function todayEvents(k) { return events(k).filter(e => isToday(e.ts)); }
 function fmtTime(ts) { const d = new Date(ts); return String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0"); }
-function avgRating(k, n) { const f = sinceDays(n); const rs = events(k).filter(e => new Date(e.ts).getTime() >= f && e.rating).map(e => e.rating); return rs.length ? rs.reduce((s, r) => s + r, 0) / rs.length : 0; }
+function avgRating(k, n, field) { field = field || "rating"; const f = sinceDays(n); const rs = events(k).filter(e => new Date(e.ts).getTime() >= f && e[field]).map(e => e[field]); return rs.length ? rs.reduce((s, r) => s + r, 0) / rs.length : 0; }
 function todayMood(k) { const ms = todayEvents(k).filter(e => e.mood).map(e => e.mood); return ms.length ? ms[ms.length - 1] : 0; }
 function nowLocalInput() { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 16); }
 
@@ -181,6 +184,16 @@ function cardHtml(c) {
     const avg = avgRating(c.key, 30);
     stats = `直近7日 <b>${w}</b>${unit} ／ 30日 <b>${m}</b>${unit}${avg ? ` ／ 平均 <b>★${avg.toFixed(1)}</b>` : ""}`;
     retroExtra = `<select data-retro-rating>${[5, 4, 3, 2, 1].map(v => `<option value="${v}">★${v}</option>`).join("")}</select>`;
+  } else if (c.type === "rated2") {
+    // 量・質を★で選んでから「＋記録」で1件記録する（初期選択は★3）
+    const starRow = (dim, label) => `<div class="crow"><span class="rlabel">${label}</span>`
+      + [1, 2, 3, 4, 5].map(v => `<button class="cbtn${v === 3 ? " sel" : ""}" data-k="${c.key}" data-dim="${dim}" data-v="${v}">★${v}</button>`).join("") + `</div>`;
+    btns = starRow("amount", "量") + starRow("quality", "質")
+      + `<button class="cbtn rec" data-k="${c.key}" data-rec2="1">＋ 記録</button><button class="cbtn undo" data-k="${c.key}" data-undo="1">取消</button>`;
+    const aAvg = avgRating(c.key, 30, "amount"), qAvg = avgRating(c.key, 30, "quality");
+    stats = `直近7日 <b>${w}</b>${unit} ／ 30日 <b>${m}</b>${unit}${aAvg ? ` ／ 量平均 <b>★${aAvg.toFixed(1)}</b>` : ""}${qAvg ? ` ／ 質平均 <b>★${qAvg.toFixed(1)}</b>` : ""}`;
+    retroExtra = `<select data-retro-amount>${[5, 4, 3, 2, 1].map(v => `<option value="${v}"${v === 3 ? " selected" : ""}>量★${v}</option>`).join("")}</select>`
+      + `<select data-retro-quality>${[5, 4, 3, 2, 1].map(v => `<option value="${v}"${v === 3 ? " selected" : ""}>質★${v}</option>`).join("")}</select>`;
   } else {
     btns = `<button class="cbtn rec" data-k="${c.key}" data-rec="1">＋ 記録</button><button class="cbtn undo" data-k="${c.key}" data-undo="1">取消</button>`;
     stats = `直近7日 <b>${w}</b>${unit} ／ 30日 <b>${m}</b>${unit}`;
@@ -192,7 +205,7 @@ function cardHtml(c) {
       <div class="cbig"><span class="cval">${bigval}</span><span class="cunit">${biglabel}</span></div>
       <div class="cbtns">${btns}${retro ? `<button class="cbtn undo" data-retro-open="${c.key}">遡って記録</button>` : ""}</div>
       <div class="cstats">${stats}</div>
-      <div class="clast">${last ? "最終記録 " + fmtTime(last.ts) + (last.rating ? `（★${last.rating}）` : "") + (last.mood ? `（${last.mood}/5）` : "") : "本日の記録なし"}</div>
+      <div class="clast">${last ? "最終記録 " + fmtTime(last.ts) + (last.rating ? `（★${last.rating}）` : "") + (last.amount ? `（量★${last.amount}・質★${last.quality || "-"}）` : "") + (last.mood ? `（${last.mood}/5）` : "") : "本日の記録なし"}</div>
       ${retro ? `<div class="retro" data-retro="${c.key}"><label>過去の日時を指定して記録</label><div class="rrow"><input type="datetime-local" data-retro-dt>${retroExtra}<button class="cbtn rec" data-retro-submit="${c.key}">記録</button></div></div>` : ""}
     </div>`;
 }
@@ -212,12 +225,26 @@ box.addEventListener("click", e => {
     if (!dtEl.value) { alert("日時を入力してください。"); return; }
     const ts = new Date(dtEl.value).toISOString();
     const rSel = p.querySelector("[data-retro-rating]");
-    record(key, rSel ? { rating: Number(rSel.value) } : {}, ts);
+    const aSel = p.querySelector("[data-retro-amount]"), qSel = p.querySelector("[data-retro-quality]");
+    let extra = {};
+    if (rSel) extra = { rating: Number(rSel.value) };
+    if (aSel && qSel) extra = { amount: Number(aSel.value), quality: Number(qSel.value) };
+    record(key, extra, ts);
     return;
   }
   const key = btn.dataset.k;
   if (btn.dataset.undo) return undo(key);
   if (btn.dataset.rec) return record(key);
+  if (btn.dataset.dim) { // 量・質の★選択トグル（この時点では記録しない）
+    btn.parentElement.querySelectorAll(".cbtn").forEach(b => b.classList.remove("sel"));
+    btn.classList.add("sel");
+    return;
+  }
+  if (btn.dataset.rec2) {
+    const card = btn.closest(".counter");
+    const a = card.querySelector('.sel[data-dim="amount"]'), q = card.querySelector('.sel[data-dim="quality"]');
+    return record(key, { amount: a ? Number(a.dataset.v) : 3, quality: q ? Number(q.dataset.v) : 3 });
+  }
   if (btn.dataset.rating) return record(key, { rating: Number(btn.dataset.rating) });
   if (btn.dataset.mood) return record(key, { mood: Number(btn.dataset.mood) });
 });
