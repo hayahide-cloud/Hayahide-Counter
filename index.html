@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Hayahide Counter</title>
+<style>
+  /* ================================================================
+     Hayahide Counter — 日次カウンター記録ページ（スマホ用・GitHub同期）
+     秘密情報は一切含まない。実データはPrivateの Hayahide-Log に保存。
+     トークンは各端末のブラウザ内(localStorage)のみに保存される。
+     ================================================================ */
+  :root {
+    --page: #0c0a11; --surface: #16131d; --surface-2: #1d1926;
+    --ink: #f2f0f7; --ink-2: #b8b3c7; --muted: #7d7890;
+    --grid: #2a2536; --border: rgba(158,140,255,0.14);
+    --accent: #9085e9; --accent-hi: #b5aaff; --accent-deep: #5b4bc4;
+    --accent-soft: rgba(144,133,233,0.10); --good: #34c85a; --bad: #e66767;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { color-scheme: dark; }
+  body {
+    background:
+      radial-gradient(900px 460px at 80% -10%, rgba(120,90,240,0.16), transparent 60%),
+      var(--page);
+    color: var(--ink);
+    font-family: system-ui, -apple-system, "Segoe UI", "Hiragino Sans", "Yu Gothic UI", sans-serif;
+    line-height: 1.6; padding: max(20px, env(safe-area-inset-top)) 16px 48px; min-height: 100vh;
+  }
+  .wrap { max-width: 720px; margin: 0 auto; }
+  header { margin-bottom: 20px; }
+  h1 {
+    font-size: 22px; font-weight: 700;
+    background: linear-gradient(90deg, var(--ink), var(--accent-hi));
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .sub { color: var(--muted); font-size: 12px; }
+
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 18px; margin-bottom: 16px; }
+  .sync-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+  .gh-status { font-size: 12px; color: var(--muted); }
+  .linkbtn { font-family: inherit; font-size: 13px; cursor: pointer; background: none; border: none; color: var(--accent-hi); text-decoration: underline; text-underline-offset: 3px; padding: 6px 2px; }
+  .linkbtn.danger { color: var(--bad); }
+  .btn { font-family: inherit; font-weight: 700; cursor: pointer; color: #fff; border: none; border-radius: 999px; padding: 9px 16px; background: linear-gradient(90deg, var(--accent-deep), var(--accent)); }
+
+  .sync-cfg { display: none; margin-top: 14px; }
+  .sync-cfg.open { display: block; }
+  .sync-cfg label { font-size: 12px; color: var(--ink-2); display: block; margin-bottom: 10px; }
+  .cfg-grid { display: grid; gap: 8px; }
+  .sync-cfg input { width: 100%; font-family: inherit; font-size: 16px; background: var(--surface-2); color: var(--ink); border: 1px solid var(--border); border-radius: 10px; padding: 11px 12px; }
+  .sync-cfg input:focus { outline: 2px solid var(--accent); border-color: transparent; }
+  .cfg-actions { display: flex; align-items: center; gap: 14px; margin-top: 12px; flex-wrap: wrap; }
+
+  .counter { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 18px; margin-bottom: 16px; }
+  .chead { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+  .cemoji { font-size: 24px; }
+  .cname { font-size: 16px; font-weight: 700; }
+  .cgoal { font-size: 11px; color: var(--muted); margin-left: auto; }
+  .cbig { display: flex; align-items: baseline; gap: 8px; margin-bottom: 12px; }
+  .cval { font-size: 34px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .cunit { font-size: 13px; color: var(--muted); }
+  .cbtns { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .cbtn { cursor: pointer; font-family: inherit; font-size: 15px; font-weight: 700; line-height: 1; border: 1px solid var(--border); border-radius: 11px; background: var(--surface-2); color: var(--ink); padding: 12px 14px; }
+  .cbtn.rec { background: linear-gradient(135deg, var(--accent-deep), var(--accent)); color: #fff; border: none; }
+  .cbtn.undo { color: var(--muted); font-size: 13px; font-weight: 600; }
+  .cbtn:active { transform: scale(0.95); }
+  .cstats { font-size: 12.5px; color: var(--ink-2); margin-top: 12px; }
+  .cstats b { color: var(--ink); font-weight: 700; }
+  .clast { font-size: 11px; color: var(--muted); margin-top: 4px; }
+  .retro { display: none; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--grid); }
+  .retro.open { display: block; }
+  .retro label { font-size: 11px; color: var(--muted); display: block; margin-bottom: 8px; }
+  .rrow { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .retro input, .retro select { font-family: inherit; font-size: 16px; background: var(--surface-2); color: var(--ink); border: 1px solid var(--border); border-radius: 10px; padding: 10px 11px; color-scheme: dark; }
+
+  footer { color: var(--muted); font-size: 11px; text-align: center; margin-top: 8px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Hayahide Counter</h1>
+    <div class="sub">日次カウンター — 記録は端末に保存し GitHub で同期</div>
+  </header>
+
+  <!-- 同期 -->
+  <div class="card">
+    <div class="sync-head">
+      <span id="gh-status" class="gh-status"></span>
+      <span>
+        <button class="linkbtn" id="gh-sync" type="button">🔄 同期</button>
+        <button class="linkbtn" id="gh-config" type="button">⚙️ 設定</button>
+      </span>
+    </div>
+    <div class="sync-cfg" id="gh-cfg-panel">
+      <label>GitHub Private リポジトリに記録を同期します（各端末で1回設定）。Fine-grained トークンは対象リポジトリのみ・Contents読み書きで発行してください。</label>
+      <div class="cfg-grid">
+        <input id="cfg-owner" placeholder="owner（例: hayahide-cloud）" autocapitalize="off" autocorrect="off">
+        <input id="cfg-repo" placeholder="repo（例: Hayahide-Log）" autocapitalize="off" autocorrect="off">
+        <input id="cfg-path" placeholder="path（例: counters.json）" value="counters.json" autocapitalize="off" autocorrect="off">
+        <input id="cfg-branch" placeholder="branch（例: main）" value="main" autocapitalize="off" autocorrect="off">
+        <input id="cfg-token" type="password" placeholder="Fine-grained token（github_pat_...）" autocapitalize="off" autocorrect="off">
+      </div>
+      <div class="cfg-actions">
+        <button class="btn" id="cfg-save" type="button">保存して同期</button>
+        <button class="linkbtn danger" id="cfg-clear" type="button">この端末の設定を削除</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="counters"></div>
+  <footer>Hayahide Counter — トークンとデータはこの公開ページには含まれません</footer>
+</div>
+
+<script>
+/* カウンター定義。type: count=回数のみ / rated=★5評価 / mood=感情値(遡及なし) */
+const COUNTERS = [
+  { key: "mood",  name: "感情値", emoji: "🙂", type: "mood",  unit: "" },
+  { key: "smoke", name: "喫煙",  emoji: "🚬", type: "count", unit: "本", goal: "減らす" },
+  { key: "ejac",  name: "射精",  emoji: "💧", type: "rated", unit: "回" },
+];
+const MOODS = [{ v: 1, e: "😣" }, { v: 2, e: "😕" }, { v: 3, e: "😐" }, { v: 4, e: "🙂" }, { v: 5, e: "😄" }];
+
+const KEY = "hayahide_events_v1", DEL_KEY = "hayahide_events_deleted_v1", CFG_KEY = "hayahide_gh_cfg";
+const box = document.getElementById("counters");
+const statusEl = document.getElementById("gh-status");
+const panel = document.getElementById("gh-cfg-panel");
+
+function all() { try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch (e) { return {}; } }
+function save(d) { localStorage.setItem(KEY, JSON.stringify(d)); }
+function events(k) { return all()[k] || []; }
+function deleted() { try { return JSON.parse(localStorage.getItem(DEL_KEY)) || []; } catch (e) { return []; } }
+function saveDeleted(a) { localStorage.setItem(DEL_KEY, JSON.stringify(a)); }
+function newId() { return (self.crypto && crypto.randomUUID) ? crypto.randomUUID() : "e" + Date.now() + Math.random().toString(36).slice(2); }
+
+function dstr(d) { return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); }
+function isToday(ts) { return dstr(new Date(ts)) === dstr(new Date()); }
+function sinceDays(n) { const d = new Date(); d.setDate(d.getDate() - n + 1); d.setHours(0, 0, 0, 0); return d.getTime(); }
+function countDays(k, n) { const f = sinceDays(n); return events(k).filter(e => new Date(e.ts).getTime() >= f).length; }
+function todayEvents(k) { return events(k).filter(e => isToday(e.ts)); }
+function fmtTime(ts) { const d = new Date(ts); return String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0"); }
+function avgRating(k, n) { const f = sinceDays(n); const rs = events(k).filter(e => new Date(e.ts).getTime() >= f && e.rating).map(e => e.rating); return rs.length ? rs.reduce((s, r) => s + r, 0) / rs.length : 0; }
+function todayMood(k) { const ms = todayEvents(k).filter(e => e.mood).map(e => e.mood); return ms.length ? ms[ms.length - 1] : 0; }
+function nowLocalInput() { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 16); }
+
+function record(key, extra, tsIso) {
+  const d = all(); d[key] = d[key] || [];
+  d[key].push(Object.assign({ id: newId(), ts: tsIso || new Date().toISOString() }, extra || {}));
+  d[key].sort((a, b) => a.ts.localeCompare(b.ts));
+  save(d); render(); scheduleSync();
+}
+function undo(key) {
+  const d = all();
+  if (d[key] && d[key].length) {
+    const removed = d[key].pop();
+    if (removed && removed.id) { const del = deleted(); del.push(removed.id); saveDeleted(del); }
+    save(d); render(); scheduleSync();
+  }
+}
+
+function cardHtml(c) {
+  const today = todayEvents(c.key);
+  const last = today.length ? today[today.length - 1] : null;
+  const w = countDays(c.key, 7), m = countDays(c.key, 30);
+  const unit = c.unit || "回";
+  let btns = "", stats = "", retroExtra = "", bigval = today.length, biglabel = "今日 " + unit, retro = true;
+
+  if (c.type === "mood") {
+    const cur = todayMood(c.key);
+    bigval = cur ? (MOODS.find(x => x.v === cur) || {}).e : "—";
+    biglabel = cur ? "今の気分（" + cur + "/5）" : "未記録";
+    btns = MOODS.map(x => `<button class="cbtn" data-k="${c.key}" data-mood="${x.v}">${x.e}</button>`).join("")
+      + `<button class="cbtn undo" data-k="${c.key}" data-undo="1">取消</button>`;
+    stats = `今日 <b>${today.length}</b>回記録 ／ 直近7日 <b>${w}</b>回`;
+    retro = false;
+  } else if (c.type === "rated") {
+    btns = [1, 2, 3, 4, 5].map(v => `<button class="cbtn" data-k="${c.key}" data-rating="${v}">★${v}</button>`).join("")
+      + `<button class="cbtn undo" data-k="${c.key}" data-undo="1">取消</button>`;
+    const avg = avgRating(c.key, 30);
+    stats = `直近7日 <b>${w}</b>${unit} ／ 30日 <b>${m}</b>${unit}${avg ? ` ／ 平均 <b>★${avg.toFixed(1)}</b>` : ""}`;
+    retroExtra = `<select data-retro-rating>${[5, 4, 3, 2, 1].map(v => `<option value="${v}">★${v}</option>`).join("")}</select>`;
+  } else {
+    btns = `<button class="cbtn rec" data-k="${c.key}" data-rec="1">＋ 記録</button><button class="cbtn undo" data-k="${c.key}" data-undo="1">取消</button>`;
+    stats = `直近7日 <b>${w}</b>${unit} ／ 30日 <b>${m}</b>${unit}`;
+  }
+
+  return `
+    <div class="counter">
+      <div class="chead"><span class="cemoji">${c.emoji}</span><span class="cname">${c.name}</span>${c.goal ? `<span class="cgoal">目標: ${c.goal}</span>` : ""}</div>
+      <div class="cbig"><span class="cval">${bigval}</span><span class="cunit">${biglabel}</span></div>
+      <div class="cbtns">${btns}${retro ? `<button class="cbtn undo" data-retro-open="${c.key}">遡って記録</button>` : ""}</div>
+      <div class="cstats">${stats}</div>
+      <div class="clast">${last ? "最終記録 " + fmtTime(last.ts) + (last.rating ? `（★${last.rating}）` : "") + (last.mood ? `（${last.mood}/5）` : "") : "本日の記録なし"}</div>
+      ${retro ? `<div class="retro" data-retro="${c.key}"><label>過去の日時を指定して記録</label><div class="rrow"><input type="datetime-local" data-retro-dt>${retroExtra}<button class="cbtn rec" data-retro-submit="${c.key}">記録</button></div></div>` : ""}
+    </div>`;
+}
+function render() { box.innerHTML = COUNTERS.map(cardHtml).join(""); }
+
+box.addEventListener("click", e => {
+  const btn = e.target.closest(".cbtn");
+  if (!btn) return;
+  if (btn.dataset.retroOpen) {
+    const p = box.querySelector(`.retro[data-retro="${btn.dataset.retroOpen}"]`);
+    if (p) { p.classList.toggle("open"); const dt = p.querySelector("[data-retro-dt]"); if (p.classList.contains("open") && dt && !dt.value) dt.value = nowLocalInput(); }
+    return;
+  }
+  if (btn.dataset.retroSubmit) {
+    const key = btn.dataset.retroSubmit, p = box.querySelector(`.retro[data-retro="${key}"]`);
+    const dtEl = p.querySelector("[data-retro-dt]");
+    if (!dtEl.value) { alert("日時を入力してください。"); return; }
+    const ts = new Date(dtEl.value).toISOString();
+    const rSel = p.querySelector("[data-retro-rating]");
+    record(key, rSel ? { rating: Number(rSel.value) } : {}, ts);
+    return;
+  }
+  const key = btn.dataset.k;
+  if (btn.dataset.undo) return undo(key);
+  if (btn.dataset.rec) return record(key);
+  if (btn.dataset.rating) return record(key, { rating: Number(btn.dataset.rating) });
+  if (btn.dataset.mood) return record(key, { mood: Number(btn.dataset.mood) });
+});
+
+/* ---------- GitHub 同期 ---------- */
+function getCfg() { try { return JSON.parse(localStorage.getItem(CFG_KEY)) || {}; } catch (e) { return {}; } }
+function setCfg(c) { localStorage.setItem(CFG_KEY, JSON.stringify(c)); }
+function cfgOk(c) { return c && c.owner && c.repo && c.path && c.token; }
+function status(m) { statusEl.textContent = m; }
+function hhmm() { const d = new Date(); return String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0"); }
+const b64enc = s => btoa(unescape(encodeURIComponent(s)));
+const b64dec = s => decodeURIComponent(escape(atob((s || "").replace(/\n/g, ""))));
+
+async function ghGet(c) {
+  const url = `https://api.github.com/repos/${c.owner}/${c.repo}/contents/${c.path}?ref=${c.branch || "main"}`;
+  const r = await fetch(url, { headers: { Authorization: "Bearer " + c.token, Accept: "application/vnd.github+json" } });
+  if (r.status === 404) return { data: null, sha: null };
+  if (!r.ok) throw new Error("GET " + r.status);
+  const j = await r.json();
+  return { data: JSON.parse(b64dec(j.content)), sha: j.sha };
+}
+async function ghPut(c, obj, sha) {
+  const url = `https://api.github.com/repos/${c.owner}/${c.repo}/contents/${c.path}`;
+  const body = { message: "counters " + new Date().toISOString(), content: b64enc(JSON.stringify(obj)), branch: c.branch || "main" };
+  if (sha) body.sha = sha;
+  const r = await fetch(url, { method: "PUT", headers: { Authorization: "Bearer " + c.token, Accept: "application/vnd.github+json", "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  if (!r.ok) throw new Error("PUT " + r.status);
+  return (await r.json()).content.sha;
+}
+function merge(local, remote) {
+  remote = remote || { events: {}, deleted: [] };
+  const del = new Set([...(local.deleted || []), ...(remote.deleted || [])]);
+  const keys = new Set([...Object.keys(local.events || {}), ...Object.keys(remote.events || {})]);
+  const events = {};
+  keys.forEach(k => {
+    const byId = new Map();
+    [...(local.events[k] || []), ...(remote.events[k] || [])].forEach(e => { if (!e.id) e.id = newId(); if (!del.has(e.id)) byId.set(e.id, e); });
+    events[k] = [...byId.values()].sort((a, b) => a.ts.localeCompare(b.ts));
+  });
+  return { events, deleted: [...del] };
+}
+let syncing = false, syncTimer = null;
+async function sync() {
+  const c = getCfg();
+  if (!cfgOk(c)) { status("未設定"); return; }
+  if (syncing) return;
+  syncing = true; status("同期中…");
+  try {
+    const remote = await ghGet(c);
+    const merged = merge({ events: all(), deleted: deleted() }, remote.data);
+    save(merged.events); saveDeleted(merged.deleted);
+    await ghPut(c, merged, remote.sha);
+    render(); status("同期完了 " + hhmm());
+  } catch (e) { status("同期失敗: " + e.message); } finally { syncing = false; }
+}
+function scheduleSync() { if (!cfgOk(getCfg())) return; clearTimeout(syncTimer); syncTimer = setTimeout(sync, 2500); }
+
+function fillCfg() {
+  const c = getCfg();
+  document.getElementById("cfg-owner").value = c.owner || "";
+  document.getElementById("cfg-repo").value = c.repo || "";
+  document.getElementById("cfg-path").value = c.path || "counters.json";
+  document.getElementById("cfg-branch").value = c.branch || "main";
+  document.getElementById("cfg-token").value = c.token || "";
+}
+document.getElementById("gh-config").addEventListener("click", () => { fillCfg(); panel.classList.toggle("open"); });
+document.getElementById("cfg-save").addEventListener("click", () => {
+  setCfg({
+    owner: document.getElementById("cfg-owner").value.trim(),
+    repo: document.getElementById("cfg-repo").value.trim(),
+    path: document.getElementById("cfg-path").value.trim() || "counters.json",
+    branch: document.getElementById("cfg-branch").value.trim() || "main",
+    token: document.getElementById("cfg-token").value.trim(),
+  });
+  panel.classList.remove("open"); sync();
+});
+document.getElementById("cfg-clear").addEventListener("click", () => { localStorage.removeItem(CFG_KEY); fillCfg(); status("設定を削除しました"); });
+document.getElementById("gh-sync").addEventListener("click", sync);
+
+render();
+if (cfgOk(getCfg())) { status("設定済み"); sync(); } else { status("未同期（この端末はまだ設定していません）"); }
+</script>
+</body>
+</html>
