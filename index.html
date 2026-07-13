@@ -54,8 +54,12 @@
   .card { background: linear-gradient(180deg, rgba(124,58,237,0.06), rgba(124,58,237,0) 46%), var(--surface); border: 1px solid var(--border); border-radius: 18px; padding: 18px; margin-bottom: 16px; box-shadow: 0 10px 28px rgba(0,0,0,0.35); }
   .sync-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
   .gh-status { font-size: 12px; color: var(--muted); }
-  .linkbtn { font-family: inherit; font-size: 13px; cursor: pointer; background: none; border: none; color: var(--accent-hi); text-decoration: underline; text-underline-offset: 3px; padding: 6px 2px; }
-  .linkbtn.danger { color: var(--bad); }
+  .linkbtns { display: inline-flex; gap: 8px; flex-wrap: wrap; }
+  .linkbtn { display: inline-flex; align-items: center; gap: 6px; font-family: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; color: var(--ink-2); background: var(--surface-2); border: 1px solid var(--border); border-radius: 999px; padding: 7px 13px; transition: color .15s, border-color .15s, background .15s; }
+  .linkbtn svg { width: 15px; height: 15px; flex: none; }
+  .linkbtn:hover, .linkbtn:active { color: var(--accent-hi); border-color: rgba(168,120,255,0.45); background: rgba(124,58,237,0.14); }
+  .linkbtn.danger { color: var(--muted); background: transparent; }
+  .linkbtn.danger:hover, .linkbtn.danger:active { color: var(--bad); border-color: rgba(248,113,113,0.4); background: rgba(248,113,113,0.10); }
   .btn { font-family: inherit; font-weight: 700; cursor: pointer; color: #fff; border: none; border-radius: 999px; padding: 9px 18px; background: linear-gradient(135deg, var(--accent-deep) 0%, #a855f7 60%, #b678fb 100%); box-shadow: 0 6px 20px rgba(124,58,237,0.3); }
 
   .sync-cfg { display: none; margin-top: 14px; }
@@ -150,10 +154,10 @@
   <div class="card">
     <div class="sync-head">
       <span id="gh-status" class="gh-status"></span>
-      <span>
-        <button class="linkbtn" id="graph-toggle" type="button">📈 グラフ</button>
-        <button class="linkbtn" id="gh-sync" type="button">🔄 同期</button>
-        <button class="linkbtn" id="gh-config" type="button">⚙️ 設定</button>
+      <span class="linkbtns">
+        <button class="linkbtn" id="graph-toggle" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V4"/><path d="M4 20h16"/><path d="M8 20v-6M13 20V9M18 20v-9"/></svg><span class="lb-label">グラフ</span></button>
+        <button class="linkbtn" id="gh-sync" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 1-15.5 6.2M3 12a9 9 0 0 1 15.5-6.2"/><path d="M21 4v5h-5M3 20v-5h5"/></svg><span>同期</span></button>
+        <button class="linkbtn" id="gh-config" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg><span>設定</span></button>
       </span>
     </div>
     <div class="sync-cfg" id="gh-cfg-panel">
@@ -849,7 +853,7 @@ const graphToggle = document.getElementById("graph-toggle");
 function applyGraphHidden() {
   const hidden = localStorage.getItem(GRAPH_HIDE_KEY) === "1";
   box.classList.toggle("hide-graphs", hidden);
-  graphToggle.textContent = hidden ? "📈 グラフ表示" : "📉 グラフ非表示";
+  graphToggle.querySelector(".lb-label").textContent = hidden ? "グラフ表示" : "グラフ非表示";
 }
 graphToggle.addEventListener("click", () => {
   localStorage.setItem(GRAPH_HIDE_KEY, localStorage.getItem(GRAPH_HIDE_KEY) === "1" ? "0" : "1");
