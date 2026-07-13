@@ -71,6 +71,15 @@
   .rsuffix { font-size: 13px; color: var(--muted); flex: none; }
   .rcheck { display: inline-flex; align-items: center; gap: 6px; font-size: 15px; color: var(--ink); background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; padding: 8px 11px; }
   .rcheck input { width: 18px; height: 18px; accent-color: var(--accent); }
+  /* 履歴（記録の一覧・編集/削除） */
+  .hist { display: none; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--grid); max-height: 340px; overflow-y: auto; }
+  .hist.open { display: block; }
+  .hrow { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--grid); font-size: 12.5px; }
+  .htime { color: var(--muted); flex: none; min-width: 5.6em; }
+  .hsum { flex: 1; color: var(--ink-2); word-break: break-word; }
+  .hact { flex: none; display: flex; gap: 6px; }
+  .hbtn { font-size: 12px; font-weight: 600; padding: 7px 11px; }
+  .hempty { color: var(--muted); font-size: 12px; padding: 4px 0; }
   .cbtn:active { transform: scale(0.95); }
   .cstats { font-size: 12.5px; color: var(--ink-2); margin-top: 12px; }
   .cstats b { color: var(--ink); font-weight: 700; }
@@ -155,9 +164,10 @@ function avgRating(k, n, field) { field = field || "rating"; const f = sinceDays
 function todayMood(k) { const ms = todayEvents(k).filter(e => e.mood).map(e => e.mood); return ms.length ? ms[ms.length - 1] : 0; }
 function nowLocalInput() { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 16); }
 
+// mt=更新時刻(ms)。同期マージで新しい編集が古いリモート版に上書きされないための版管理
 function record(key, extra, tsIso) {
   const d = all(); d[key] = d[key] || [];
-  d[key].push(Object.assign({ id: newId(), ts: tsIso || new Date().toISOString() }, extra || {}));
+  d[key].push(Object.assign({ id: newId(), ts: tsIso || new Date().toISOString(), mt: Date.now() }, extra || {}));
   d[key].sort((a, b) => a.ts.localeCompare(b.ts));
   save(d); render(); scheduleSync();
 }
@@ -168,6 +178,44 @@ function undo(key) {
     if (removed && removed.id) { const del = deleted(); del.push(removed.id); saveDeleted(del); }
     save(d); render(); scheduleSync();
   }
+}
+// 記録1件の値を上書き更新（idは保持、mtを更新）。tsIso 未指定なら元のtsを維持
+function updateEvent(key, id, extra, tsIso) {
+  const d = all(); const arr = d[key] || [];
+  const i = arr.findIndex(e => e.id === id);
+  if (i < 0) return;
+  arr[i] = Object.assign({ id, ts: tsIso || arr[i].ts, mt: Date.now() }, extra || {});
+  arr.sort((a, b) => a.ts.localeCompare(b.ts));
+  save(d); render(); scheduleSync();
+}
+// 記録1件を削除（墓標を残して端末間に伝播）
+function deleteEvent(key, id) {
+  const d = all(); const arr = d[key] || [];
+  const i = arr.findIndex(e => e.id === id);
+  if (i < 0) return;
+  arr.splice(i, 1);
+  const del = deleted(); del.push(id); saveDeleted(del);
+  save(d); render(); scheduleSync();
+}
+
+let editing = null; // 編集中の記録 { key, id }。null=通常記録モード
+
+// 履歴表示用の日時（M/D HH:MM）
+function mdhm(ts) { const d = new Date(ts); return (d.getMonth() + 1) + "/" + d.getDate() + " " + String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0"); }
+// 記録1件の値を短く要約（履歴一覧用。表示時に esc() でエスケープする前提）
+function summ(e) {
+  const p = [];
+  if (e.mood) p.push(e.mood + "/5");
+  if (e.amount) p.push("量★" + e.amount + "・質★" + (e.quality || "-"));
+  if (e.small || e.large) p.push([e.small ? "小" : "", e.large ? "大" : ""].filter(Boolean).join("・"));
+  if (e.sex != null) p.push(e.sex ? "接触あり" : "接触なし");
+  if (e.content) p.push("内容:" + e.content);
+  if (e.price != null) p.push(e.price + "円");
+  if (e.place) p.push("場所:" + e.place);
+  if (e.who) p.push("誰と:" + e.who);
+  if (e.memo) p.push("視覚資料:" + e.memo);
+  if (e.rating) p.push("★" + e.rating);
+  return p.join(" ／ ") || "記録";
 }
 
 function cardHtml(c) {
@@ -186,7 +234,8 @@ function cardHtml(c) {
       + `<button class="cbtn rec" data-k="${c.key}" data-recmood="1">＋ 記録</button>`
       + `<button class="cbtn undo" data-k="${c.key}" data-undo="1">取消</button>`;
     stats = `今日 <b>${today.length}</b>回記録 ／ 直近7日 <b>${w}</b>回`;
-    retro = false;
+    // 遡って記録・編集用の気分セレクタ
+    retroExtra = `<select data-retro-moodsel><option value="" selected>気分 未選択</option>${MOODS.map(x => `<option value="${x.v}">${x.e} ${x.v}/5</option>`).join("")}</select>`;
   } else if (c.type === "rated") {
     btns = [1, 2, 3, 4, 5].map(v => `<button class="cbtn" data-k="${c.key}" data-rating="${v}">★${v}</button>`).join("")
       + `<button class="cbtn undo" data-k="${c.key}" data-undo="1">取消</button>`;
@@ -236,35 +285,92 @@ function cardHtml(c) {
     stats = `直近7日 <b>${w}</b>${unit} ／ 30日 <b>${m}</b>${unit}`;
   }
 
+  const evs = events(c.key).slice().reverse(); // 新しい順
+  const histRows = evs.length
+    ? evs.slice(0, 50).map(e => `<div class="hrow"><span class="htime">${mdhm(e.ts)}</span><span class="hsum">${esc(summ(e))}</span><span class="hact"><button class="cbtn hbtn" data-editid="${e.id}" data-k="${c.key}">編集</button><button class="cbtn hbtn" data-delid="${e.id}" data-k="${c.key}">削除</button></span></div>`).join("")
+    : `<div class="hempty">まだ記録がありません</div>`;
+
   return `
-    <div class="counter">
+    <div class="counter" data-key="${c.key}">
       <div class="chead"><span class="cemoji">${c.emoji}</span><span class="cname">${c.name}</span>${c.goal ? `<span class="cgoal">目標: ${c.goal}</span>` : ""}</div>
       <div class="cbig"><span class="cval">${bigval}</span><span class="cunit">${biglabel}</span></div>
-      <div class="cbtns">${btns}${retro ? `<button class="cbtn undo" data-retro-open="${c.key}">遡って記録</button>` : ""}</div>
+      <div class="cbtns">${btns}${retro ? `<button class="cbtn undo" data-retro-open="${c.key}">遡って記録</button>` : ""}<button class="cbtn undo" data-hist-open="${c.key}">履歴</button></div>
       <div class="cstats">${stats}</div>
       <div class="clast">${last ? "最終記録 " + fmtTime(last.ts) + (last.rating ? `（★${last.rating}）` : "") + (last.amount ? `（量★${last.amount}・質★${last.quality || "-"}${last.sex != null ? (last.sex ? "・接触あり" : "・接触なし") : ""}）${(last.small || last.large) ? " " + [last.small ? "小" : "", last.large ? "大" : ""].filter(Boolean).join("・") : ""}` : "") + (last.mood ? `（${last.mood}/5）` : "") + (last.content ? ` 内容: ${esc(last.content)}` : "") + (last.price != null ? ` ${last.price}円` : "") + (last.place ? ` 場所: ${esc(last.place)}` : "") + (last.who ? ` 誰と: ${esc(last.who)}` : "") + (last.memo ? ` 視覚資料: ${esc(last.memo)}` : "") : "本日の記録なし"}</div>
-      ${retro ? `<div class="retro" data-retro="${c.key}"><label>過去の日時を指定して記録</label><div class="rrow"><input type="datetime-local" data-retro-dt>${retroExtra}<button class="cbtn rec" data-retro-submit="${c.key}">記録</button></div></div>` : ""}
+      ${retro ? `<div class="retro" data-retro="${c.key}"><label class="retro-label">過去の日時を指定して記録</label><div class="rrow"><input type="datetime-local" data-retro-dt>${retroExtra}<button class="cbtn rec" data-retro-submit="${c.key}">記録</button><button class="cbtn undo" data-canceledit="${c.key}" style="display:none">キャンセル</button></div></div>` : ""}
+      <div class="hist" data-hist="${c.key}">${histRows}</div>
     </div>`;
 }
-function render() { box.innerHTML = COUNTERS.map(cardHtml).join(""); }
+// 編集モード: 遡って記録フォームを対象記録の値で埋め、送信を「更新」に切り替える
+function fillEditForm(card, e) {
+  const p = card.querySelector(".retro");
+  if (!p) return;
+  p.classList.add("open");
+  const set = (sel, val) => { const el = p.querySelector(sel); if (el) el.value = val; };
+  const dt = p.querySelector("[data-retro-dt]");
+  if (dt) { const d = new Date(e.ts); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); dt.value = d.toISOString().slice(0, 16); }
+  if (e.mood != null) set("[data-retro-moodsel]", String(e.mood));
+  if (e.amount != null) set("[data-retro-amount]", String(e.amount));
+  if (e.quality != null) set("[data-retro-quality]", String(e.quality));
+  set("[data-retro-sex]", e.sex ? "1" : "0");
+  set("[data-retro-memo]", e.memo || "");
+  set("[data-retro-content]", e.content || "");
+  set("[data-retro-price]", e.price != null ? String(e.price) : "");
+  set("[data-retro-place]", e.place || "");
+  set("[data-retro-who]", e.who || "");
+  p.querySelectorAll("[data-retro-check]").forEach(ch => ch.checked = !!e[ch.dataset.retroCheck]);
+  const submit = p.querySelector("[data-retro-submit]"); if (submit) submit.textContent = "更新";
+  const lbl = p.querySelector(".retro-label"); if (lbl) lbl.textContent = "この記録を修正（日時も変更可）";
+  const cancel = p.querySelector("[data-canceledit]"); if (cancel) cancel.style.display = "";
+}
+function render() {
+  box.innerHTML = COUNTERS.map(cardHtml).join("");
+  if (editing) { // 再描画後に編集モードを復元
+    const e = events(editing.key).find(ev => ev.id === editing.id);
+    const card = box.querySelector(`.counter[data-key="${editing.key}"]`);
+    if (e && card) fillEditForm(card, e); else editing = null;
+  }
+}
 
 box.addEventListener("click", e => {
   const btn = e.target.closest(".cbtn");
   if (!btn) return;
   if (btn.dataset.retroOpen) {
+    if (editing) { editing = null; render(); } // 通常の遡って記録に戻す
     const p = box.querySelector(`.retro[data-retro="${btn.dataset.retroOpen}"]`);
     if (p) { p.classList.toggle("open"); const dt = p.querySelector("[data-retro-dt]"); if (p.classList.contains("open") && dt && !dt.value) dt.value = nowLocalInput(); }
     return;
   }
+  if (btn.dataset.histOpen) { // 履歴パネルの開閉
+    const p = box.querySelector(`.hist[data-hist="${btn.dataset.histOpen}"]`);
+    if (p) p.classList.toggle("open");
+    return;
+  }
+  if (btn.dataset.editid) { // 記録の編集を開始（フォームに値を流し込む）
+    editing = { key: btn.dataset.k, id: btn.dataset.editid };
+    render();
+    const rp = box.querySelector(`.counter[data-key="${btn.dataset.k}"] .retro`);
+    if (rp) rp.scrollIntoView({ block: "nearest" });
+    return;
+  }
+  if (btn.dataset.delid) { // 記録の削除
+    if (confirm("この記録を削除しますか？")) deleteEvent(btn.dataset.k, btn.dataset.delid);
+    return;
+  }
+  if (btn.dataset.canceledit) { editing = null; render(); return; }
   if (btn.dataset.retroSubmit) {
     const key = btn.dataset.retroSubmit, p = box.querySelector(`.retro[data-retro="${key}"]`);
     const dtEl = p.querySelector("[data-retro-dt]");
     if (!dtEl.value) { alert("日時を入力してください。"); return; }
     const ts = new Date(dtEl.value).toISOString();
+    const moodSel = p.querySelector("[data-retro-moodsel]");
     const rSel = p.querySelector("[data-retro-rating]");
     const aSel = p.querySelector("[data-retro-amount]"), qSel = p.querySelector("[data-retro-quality]");
     let extra = {};
-    if (rSel) extra = { rating: Number(rSel.value) };
+    if (moodSel) {
+      if (!moodSel.value) { alert("気分を選んでください。"); return; }
+      extra = { mood: Number(moodSel.value) };
+    } else if (rSel) extra = { rating: Number(rSel.value) };
     if (aSel && qSel) {
       if (!aSel.value || !qSel.value) { alert("量と質を選んでください。"); return; }
       extra = { amount: Number(aSel.value), quality: Number(qSel.value) };
@@ -286,7 +392,8 @@ box.addEventListener("click", e => {
       const whoEl = p.querySelector("[data-retro-who]");
       if (whoEl && whoEl.value.trim()) extra.who = whoEl.value.trim();
     }
-    record(key, extra, ts);
+    if (editing && editing.key === key) { updateEvent(key, editing.id, extra, ts); editing = null; }
+    else record(key, extra, ts);
     return;
   }
   const key = btn.dataset.k;
@@ -372,7 +479,13 @@ function merge(local, remote) {
   const events = {};
   keys.forEach(k => {
     const byId = new Map();
-    [...(local.events[k] || []), ...(remote.events[k] || [])].forEach(e => { if (!e.id) e.id = newId(); if (!del.has(e.id)) byId.set(e.id, e); });
+    // 同じidが両側にある場合は mt（更新時刻）が新しい方を採用し、編集が古い版に負けないようにする
+    [...(local.events[k] || []), ...(remote.events[k] || [])].forEach(e => {
+      if (!e.id) e.id = newId();
+      if (del.has(e.id)) return;
+      const prev = byId.get(e.id);
+      if (!prev || (e.mt || 0) >= (prev.mt || 0)) byId.set(e.id, e);
+    });
     events[k] = [...byId.values()].sort((a, b) => a.ts.localeCompare(b.ts));
   });
   return { events, deleted: [...del] };
