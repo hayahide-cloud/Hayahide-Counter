@@ -81,6 +81,10 @@
   .hact { flex: none; display: flex; gap: 6px; }
   .hbtn { font-size: 12px; font-weight: 600; padding: 7px 11px; }
   .hempty { color: var(--muted); font-size: 12px; padding: 4px 0; }
+  /* 今日1日のグラフ */
+  .daygraph-wrap { margin-top: 10px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 12px; padding: 8px 10px 4px; }
+  .daygraph { width: 100%; height: auto; display: block; }
+  .dglegend { font-size: 10.5px; color: var(--muted); text-align: right; margin-top: 2px; }
   .cbtn:active { transform: scale(0.95); }
   .cstats { font-size: 12.5px; color: var(--ink-2); margin-top: 12px; }
   .cstats b { color: var(--ink); font-weight: 700; }
@@ -222,6 +226,44 @@ function summ(e) {
   return p.join(" ／ ") || "記録";
 }
 
+// 1日のグラフ用: 折れ線＋点 / 点のみ（中抜き）
+function dgLine(pts, color) {
+  if (!pts.length) return "";
+  const path = pts.map((p, i) => (i ? "L" : "M") + p.x.toFixed(1) + " " + p.y.toFixed(1)).join(" ");
+  const dots = pts.map(p => `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="2.4" fill="${color}"/>`).join("");
+  return `<path d="${path}" fill="none" stroke="${color}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>${dots}`;
+}
+function dgDots(pts, color) {
+  return pts.map(p => `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="2.2" fill="none" stroke="${color}" stroke-width="1.4"/>`).join("");
+}
+// 今日1日のグラフ。横軸=時刻(0-24h)、縦軸=1〜5評価（count型は時刻の縦線）
+function dayGraph(c) {
+  const evs = todayEvents(c.key).slice().sort((a, b) => a.ts.localeCompare(b.ts));
+  const W = 300, H = 56, padL = 6, padR = 6, padT = 5, padB = 13;
+  const plotW = W - padL - padR, plotH = H - padT - padB;
+  const xOf = ts => { const d = new Date(ts); return padL + (d.getHours() + d.getMinutes() / 60) / 24 * plotW; };
+  const yOf = v => padT + (1 - (v - 1) / 4) * plotH; // 1..5 を 下..上 に
+  let grid = "";
+  [0, 6, 12, 18, 24].forEach(h => { const x = padL + h / 24 * plotW; grid += `<line x1="${x.toFixed(1)}" y1="${padT}" x2="${x.toFixed(1)}" y2="${(padT + plotH).toFixed(1)}" stroke="var(--grid)" stroke-width="1"/><text x="${x.toFixed(1)}" y="${H - 3}" fill="var(--muted)" font-size="8" text-anchor="middle">${h}</text>`; });
+  const isValue = (c.type === "mood" || c.type === "rated2" || c.type === "rated");
+  const neutral = isValue ? `<line x1="${padL}" y1="${yOf(3).toFixed(1)}" x2="${padL + plotW}" y2="${yOf(3).toFixed(1)}" stroke="var(--grid)" stroke-width="1" stroke-dasharray="3 3"/>` : "";
+  let series = "";
+  if (!evs.length) {
+    series = `<text x="${W / 2}" y="${(padT + plotH / 2 + 3).toFixed(1)}" fill="var(--muted)" font-size="10" text-anchor="middle">本日の記録なし</text>`;
+  } else if (c.type === "mood") {
+    series = dgLine(evs.filter(e => e.mood).map(e => ({ x: xOf(e.ts), y: yOf(e.mood) })), "var(--accent-hi)");
+  } else if (c.type === "rated2") {
+    series = dgLine(evs.filter(e => e.amount).map(e => ({ x: xOf(e.ts), y: yOf(e.amount) })), "var(--accent)")
+      + dgDots(evs.filter(e => e.quality).map(e => ({ x: xOf(e.ts), y: yOf(e.quality) })), "var(--good)");
+  } else if (c.type === "rated") {
+    series = dgLine(evs.filter(e => e.rating).map(e => ({ x: xOf(e.ts), y: yOf(e.rating) })), "var(--accent)");
+  } else { // count型（喫煙など）は記録時刻に縦線
+    series = evs.map(e => { const x = xOf(e.ts); return `<line x1="${x.toFixed(1)}" y1="${padT}" x2="${x.toFixed(1)}" y2="${(padT + plotH).toFixed(1)}" stroke="var(--accent)" stroke-width="2"/>`; }).join("");
+  }
+  const legend = c.type === "rated2" ? `<div class="dglegend"><b style="color:var(--accent)">●</b> 量　<b style="color:var(--good)">○</b> 質</div>` : "";
+  return `<div class="daygraph-wrap"><svg class="daygraph" viewBox="0 0 ${W} ${H}" role="img" aria-label="今日1日のグラフ">${grid}${neutral}${series}</svg>${legend}</div>`;
+}
+
 function cardHtml(c) {
   const today = todayEvents(c.key);
   const last = today.length ? today[today.length - 1] : null;
@@ -302,6 +344,7 @@ function cardHtml(c) {
       <div class="cbig"><span class="cval">${bigval}</span><span class="cunit">${biglabel}</span></div>
       <div class="cbtns">${btns}${retro ? `<button class="cbtn undo" data-retro-open="${c.key}">遡って記録</button>` : ""}<button class="cbtn undo" data-hist-open="${c.key}">履歴</button></div>
       <div class="cstats">${stats}</div>
+      ${dayGraph(c)}
       <div class="clast">${last ? "最終記録 " + fmtTime(last.ts) + (last.rating ? `（★${last.rating}）` : "") + (last.amount ? `（量★${last.amount}・質★${last.quality || "-"}${last.sex != null ? (last.sex ? "・接触あり" : "・接触なし") : ""}）${(last.small || last.large) ? " " + [last.small ? "小" : "", last.large ? "大" : ""].filter(Boolean).join("・") : ""}` : "") + (last.mood ? `（${last.mood}/5）` : "") + (last.content ? ` 内容: ${esc(last.content)}` : "") + (last.price != null ? ` ${last.price}円` : "") + (last.place ? ` 場所: ${esc(last.place)}` : "") + (last.who ? ` 誰と: ${esc(last.who)}` : "") + (last.memo ? ` 視覚資料: ${esc(last.memo)}` : "") : "本日の記録なし"}</div>
       ${retro ? `<div class="retro" data-retro="${c.key}"><label class="retro-label">過去の日時を指定して記録</label><div class="rrow"><input type="datetime-local" data-retro-dt>${retroExtra}<button class="cbtn rec" data-retro-submit="${c.key}">記録</button><button class="cbtn undo" data-canceledit="${c.key}" style="display:none">キャンセル</button></div></div>` : ""}
       <div class="hist" data-hist="${c.key}">${histRows}</div>
