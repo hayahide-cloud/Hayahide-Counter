@@ -529,7 +529,7 @@ function cardHtml(c) {
       <div class="clast">${last ? "最終記録 " + fmtTime(last.ts) + (last.rating ? `（★${last.rating}）` : "") + (last.amount ? `（量★${last.amount}・質★${last.quality || "-"}${last.sex != null ? (last.sex ? "・接触あり" : "・接触なし") : ""}）${(last.small || last.large) ? " " + [last.small ? "小" : "", last.large ? "大" : ""].filter(Boolean).join("・") : ""}` : "") + (last.mood ? `（${last.mood}/5）` : "") + (last.content ? ` 内容: ${esc(last.content)}` : "") + (last.price != null ? ` ${last.price}円` : "") + (last.place ? ` 場所: ${esc(last.place)}` : "") + (last.who ? ` 誰と: ${esc(last.who)}` : "") + (last.memo ? ` 視覚資料: ${esc(last.memo)}` : "") + (last.ml != null ? `${last.start ? `（飲み始め ${fmtTime(last.start)}）` : ""} ${last.ml}mL` : "") + (last.mg != null ? ` ${last.mg}mg` : "") + (last.reason ? ` ${esc(last.reason)}` : "") : "本日の記録なし"}</div>
       ${retro ? `<div class="retro" data-retro="${c.key}"><label class="retro-label">${c.type === "water" ? "過去の時刻で飲み始め（継続中）／飲み終わり（記録）" : "過去の日時を指定して記録"}</label><div class="rrow"><input type="datetime-local" data-retro-dt><span class="dtadj"><button class="cbtn adj" data-dtadj="-5">−5</button><button class="cbtn adj" data-dtadj="-1">−1</button><button class="cbtn adj" data-dtadj="1">+1</button><button class="cbtn adj" data-dtadj="5">+5</button><button class="cbtn adj" data-dtnow="1">今</button></span>${retroExtra}${c.type === "water"
         ? `<button class="cbtn rec" data-wstart="${c.key}">飲み始め</button><button class="cbtn rec" data-wfinish="${c.key}">飲み終わり</button><button class="cbtn rec" data-retro-submit="${c.key}" style="display:none">更新</button>`
-        : `<button class="cbtn rec" data-retro-submit="${c.key}">記録</button>`}<button class="cbtn undo" data-canceledit="${c.key}" style="display:none">キャンセル</button></div></div>` : ""}
+        : `<button class="cbtn rec" data-retro-submit="${c.key}">記録</button>`}<button class="cbtn undo" data-canceledit="${c.key}" style="display:none">キャンセル</button></div>${c.type === "water" ? `<div class="rrow wstartrow" data-wstartrow style="display:none"><span class="rlabel">飲み始め</span><input type="datetime-local" data-retro-start><span class="dtadj"><button class="cbtn adj" data-dtadj="-5">−5</button><button class="cbtn adj" data-dtadj="-1">−1</button><button class="cbtn adj" data-dtadj="1">+1</button><button class="cbtn adj" data-dtadj="5">+5</button><button class="cbtn adj" data-dtnow="1">今</button></span></div>` : ""}</div>` : ""}
     </div>`;
 }
 // 編集モード: 遡って記録フォームを対象記録の値で埋め、送信を「更新」に切り替える
@@ -553,10 +553,17 @@ function fillEditForm(card, e) {
   set("[data-retro-dose]", e.mg != null ? String(e.mg) : "");
   set("[data-retro-reason]", e.reason || "");
   p.querySelectorAll("[data-retro-check]").forEach(ch => ch.checked = !!e[ch.dataset.retroCheck]);
+  // 水は「飲み始め」欄を表示して開始時刻も編集可能にする（上=飲み終わり／下=飲み始め）
+  const startRow = p.querySelector("[data-wstartrow]");
+  if (startRow) {
+    startRow.style.display = "";
+    const sEl = startRow.querySelector("[data-retro-start]");
+    if (sEl) sEl.value = e.start ? toLocalInput(e.start) : "";
+  }
   // 水の新規用ボタン（飲み始め/飲み終わり）は編集時は隠し、更新ボタンを出す
   p.querySelectorAll("[data-wstart],[data-wfinish]").forEach(el => el.style.display = "none");
   const submit = p.querySelector("[data-retro-submit]"); if (submit) { submit.textContent = "更新"; submit.style.display = ""; }
-  const lbl = p.querySelector(".retro-label"); if (lbl) lbl.textContent = "この記録を修正（日時も変更可）";
+  const lbl = p.querySelector(".retro-label"); if (lbl) lbl.textContent = startRow ? "この記録を修正（上=飲み終わり／下=飲み始め）" : "この記録を修正（日時も変更可）";
   const cancel = p.querySelector("[data-canceledit]"); if (cancel) cancel.style.display = "";
 }
 // 折りたたみ可能なカードグループ。連続する同一 group のカードを1つの開閉枠にまとめる
@@ -614,8 +621,8 @@ box.addEventListener("click", e => {
     if (p) { p.classList.toggle("open"); const dt = p.querySelector("[data-retro-dt]"); if (p.classList.contains("open") && dt && !dt.value) dt.value = nowLocalInput(); }
     return;
   }
-  if (btn.dataset.dtadj || btn.dataset.dtnow) { // 日時の微調整（スクロール不要で分単位に合わせる）
-    const dtEl = btn.closest(".rrow").querySelector("[data-retro-dt]");
+  if (btn.dataset.dtadj || btn.dataset.dtnow) { // 日時の微調整（スクロール不要で分単位に合わせる）。飲み始め欄(data-retro-start)にも対応
+    const dtEl = btn.closest(".rrow").querySelector("[data-retro-dt],[data-retro-start]");
     if (btn.dataset.dtnow) { dtEl.value = nowLocalInput(); return; }
     const base = dtEl.value ? new Date(dtEl.value) : new Date();
     base.setMinutes(base.getMinutes() + Number(btn.dataset.dtadj));
@@ -656,6 +663,9 @@ box.addEventListener("click", e => {
     else if (mlSel) {
       if (mlSel.value.trim() === "" || isNaN(Number(mlSel.value))) { alert("mLを入力してください。"); return; }
       extra = { ml: Number(mlSel.value) };
+      // 水の編集: 飲み始め欄に値があれば開始時刻も保持（updateEventは全項目置換のため明示的に含める）
+      const startEl = p.querySelector("[data-retro-start]");
+      if (startEl && startEl.value) extra.start = new Date(startEl.value).toISOString();
     } else if (doseSel) {
       if (doseSel.value.trim() === "" || isNaN(Number(doseSel.value))) { alert("用量を入力してください。"); return; }
       extra = { mg: Number(doseSel.value) };
