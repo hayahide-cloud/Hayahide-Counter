@@ -469,7 +469,7 @@ function cardHtml(c) {
       + `<input class="memo" data-place="${c.key}" type="text" placeholder="外食先など（任意）" autocapitalize="off" autocorrect="off"></div>`;
     const whoRow = `<div class="crow"><span class="rlabel">誰と</span>`
       + `<input class="memo" data-who="${c.key}" type="text" placeholder="同席者（任意）" autocapitalize="off" autocorrect="off"></div>`;
-    // トイレなど checks:true のカードは小・大などの区分を複数選択できる（いずれか必須）
+    // トイレなど checks:true のカードは小・大などの区分を排他選択する（どちらか片方・いずれか必須）
     const checkRow = c.checks ? `<div class="crow"><span class="rlabel">区分</span>`
       + c.checks.map(ch => `<button class="cbtn" data-k="${c.key}" data-check="${ch.k}">${ch.label}</button>`).join("") + `</div>` : "";
     btns = checkRow + (c.sex ? sexRow : "") + starRow("amount", "量") + starRow("quality", "質")
@@ -725,8 +725,10 @@ box.addEventListener("click", e => {
     btn.classList.add("sel");
     return;
   }
-  if ("check" in btn.dataset) { // 小・大などの区分は独立トグル（複数選択可）
-    btn.classList.toggle("sel");
+  if ("check" in btn.dataset) { // 小・大の区分は排他トグル（片方のみ選択可）。他の区分を解除してから自分をトグル
+    const wasSel = btn.classList.contains("sel");
+    btn.closest(".counter").querySelectorAll("[data-check]").forEach(b => b.classList.remove("sel"));
+    if (!wasSel) btn.classList.add("sel");
     return;
   }
   if (btn.dataset.rec2) {
@@ -808,6 +810,12 @@ box.addEventListener("click", e => {
     if (reasonEl && reasonEl.value.trim()) extra.reason = reasonEl.value.trim();
     return record(k, extra);
   }
+});
+
+// 遡って記録・編集の区分チェック（小・大）も排他にする（1つonにしたら他をoff）
+box.addEventListener("change", e => {
+  const cb = e.target.closest("[data-retro-check]");
+  if (cb && cb.checked) cb.closest(".retro").querySelectorAll("[data-retro-check]").forEach(o => { if (o !== cb) o.checked = false; });
 });
 
 /* ---------- GitHub 同期 ---------- */
