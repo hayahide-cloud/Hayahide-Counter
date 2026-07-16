@@ -820,8 +820,9 @@ const b64enc = s => btoa(unescape(encodeURIComponent(s)));
 const b64dec = s => decodeURIComponent(escape(atob((s || "").replace(/\n/g, ""))));
 
 async function ghGet(c) {
-  const url = `https://api.github.com/repos/${c.owner}/${c.repo}/contents/${c.path}?ref=${c.branch || "main"}`;
-  const r = await fetch(url, { headers: { Authorization: "Bearer " + c.token, Accept: "application/vnd.github+json" } });
+  // キャッシュから古いsha（版番号）が返るとPUTが409で失敗し続けるため、キャッシュを完全に無効化して常に最新shaを取る
+  const url = `https://api.github.com/repos/${c.owner}/${c.repo}/contents/${c.path}?ref=${c.branch || "main"}&t=${Date.now()}`;
+  const r = await fetch(url, { cache: "no-store", headers: { Authorization: "Bearer " + c.token, Accept: "application/vnd.github+json", "Cache-Control": "no-cache" } });
   if (r.status === 404) return { data: null, sha: null };
   if (!r.ok) throw new Error("GET " + r.status);
   const j = await r.json();
@@ -888,8 +889,13 @@ async function sync() {
   if (syncing) return;
   syncing = true; status("同期中…");
   try {
-    try { await syncOnce(c); }
-    catch (e) { if (/\b409\b/.test(e.message)) { await syncOnce(c); } else { throw e; } } // 競合時は最新SHAで1回再試行
+    // 競合(409)は他端末の更新が原因。最新shaを取り直して数回まで再試行する（毎回キャッシュ無効GET）
+    let done = false, lastErr;
+    for (let i = 0; i < 5 && !done; i++) {
+      try { await syncOnce(c); done = true; }
+      catch (e) { lastErr = e; if (!/\b409\b/.test(e.message)) throw e; }
+    }
+    if (!done) throw lastErr;
     try { await fetchHealth(c); } catch (e) { /* ヘルスケア取得失敗は無視 */ }
     render(); renderHealth(); status("同期完了 " + hhmm());
   } catch (e) { status("同期失敗: " + e.message); } finally { syncing = false; }
