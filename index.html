@@ -488,13 +488,13 @@ function cardHtml(c) {
       + (c.place ? `<input class="memo" data-retro-place type="text" placeholder="場所（任意）" autocapitalize="off" autocorrect="off">` : "")
       + (c.who ? `<input class="memo" data-retro-who type="text" placeholder="誰と（任意）" autocapitalize="off" autocorrect="off">` : "");
   } else if (c.type === "water") {
-    // 飲み始め→（継続中）→飲み終わりで記録。量はデフォルト500mL・変更可
+    // 飲み始め→（継続中）→飲み終わりで記録。量はデフォルト550mL・変更可
     const pend = activePending(c.key);
     const totalToday = todayEvents(c.key).reduce((s, e) => s + (e.ml || 0), 0);
-    const amt = pend ? pend.ml : 500;
+    const amt = pend ? pend.ml : 550;
     if (pend) { bigval = "継続中"; biglabel = "開始 " + fmtTime(pend.start); }
     else { bigval = totalToday; biglabel = "今日 mL"; }
-    const mlRow = `<div class="crow"><span class="rlabel">量</span><input class="memo" data-water-ml="${c.key}" type="number" inputmode="numeric" value="${amt}" placeholder="500"><span class="rsuffix">mL</span></div>`;
+    const mlRow = `<div class="crow"><span class="rlabel">量</span><input class="memo" data-water-ml="${c.key}" type="number" inputmode="numeric" value="${amt}" placeholder="550"><span class="rsuffix">mL</span></div>`;
     btns = mlRow + (pend
       ? `<button class="cbtn rec" data-water-finish="${c.key}">飲み終わり</button><button class="cbtn undo" data-water-cancel="${c.key}">中止</button>`
       : `<button class="cbtn rec" data-water-start="${c.key}">飲み始め</button>`);
@@ -775,16 +775,16 @@ box.addEventListener("click", e => {
   // 水: 飲み始め→継続中→飲み終わり
   if (btn.dataset.waterStart) {
     const k = btn.dataset.waterStart, mlEl = btn.closest(".counter").querySelector("[data-water-ml]");
-    let ml = mlEl && mlEl.value.trim() !== "" ? Number(mlEl.value) : 500;
-    if (!(ml > 0)) ml = 500;
+    let ml = mlEl && mlEl.value.trim() !== "" ? Number(mlEl.value) : 550;
+    if (!(ml > 0)) ml = 550;
     setPending(k, { start: new Date().toISOString(), ml });
     return render();
   }
   if (btn.dataset.waterFinish) {
     const k = btn.dataset.waterFinish, pend = activePending(k);
     const mlEl = btn.closest(".counter").querySelector("[data-water-ml]");
-    let ml = mlEl && mlEl.value.trim() !== "" ? Number(mlEl.value) : (pend ? pend.ml : 500);
-    if (!(ml > 0)) ml = 500;
+    let ml = mlEl && mlEl.value.trim() !== "" ? Number(mlEl.value) : (pend ? pend.ml : 550);
+    if (!(ml > 0)) ml = 550;
     setPending(k, null);
     return record(k, pend ? { ml, start: pend.start } : { ml }); // 記録時刻=飲み終わり
   }
