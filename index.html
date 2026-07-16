@@ -381,7 +381,9 @@ function dayGraphSvg(evs, type) {
       const y = yOfMl(e.ml).toFixed(1), xe = xOf(e.ts).toFixed(1);
       let s = "";
       if (e.start) {
-        const xs = xOf(e.start).toFixed(1);
+        // 1日グラフは当日(0-24h)軸。前日に飲み始めた記録は開始点を当日0時(左端)にクランプする
+        const dayStart = new Date(e.ts); dayStart.setHours(0, 0, 0, 0);
+        const xs = (new Date(e.start) < dayStart ? padL : xOf(e.start)).toFixed(1);
         s += `<line x1="${xs}" y1="${y}" x2="${xe}" y2="${y}" stroke="var(--accent)" stroke-width="2.4" stroke-linecap="round"/>`
           + `<circle cx="${xs}" cy="${y}" r="2.3" fill="none" stroke="var(--accent)" stroke-width="1.5"/>`;
       }
